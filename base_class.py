@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+from base_function import lla_to_xyz, xyz_to_lla, ecef_to_enu, analysis_gga
 
 
 class RowParse:
@@ -39,11 +40,11 @@ class LogAnalysis:
         self.fp.seek(self.pos, 0)
         self.NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14,
                           "chl_time": 3, "dopp": 11, "PR": 10,
-                          "svINFO": 9, "prnNOW": 9,
+                          "svINFO": 9, "prnNOW": 9, "fix_sv": 2,
                           "cnr": 9, "pli": 9}
         self.one_sec_row = {"cnr": '', "pli": '', "svINFO": '', "prnNOW": '',
                             "RMC": '', "GGA": '', "GFM": '', "chl_time": '',
-                            "dopp": '', 'PR': ''}
+                            "dopp": '', 'PR': '', "fix_sv": ''}
         self.row_num = 0
         self.restart = 0
         self.time_bak = -1
@@ -76,6 +77,8 @@ class LogAnalysis:
                 self.one_sec_row["pli"] = line
             elif line.startswith("cnr:"):
                 self.one_sec_row["cnr"] = line
+            elif line.startswith("PV, val num"):
+                self.one_sec_row["fix_sv"] = line
             elif line.startswith("CHL TIME,"):
                 self.one_sec_row["chl_time"] = line
             elif line.startswith('$GPGGA'):
@@ -85,7 +88,7 @@ class LogAnalysis:
             elif line.startswith('$GPGFM'):
                 self.one_sec_row["GFM"] = line
             elif line.startswith('CHL PR,'):
-                self.one_sec_row["GGA"] = line
+                self.one_sec_row["PR"] = line
             elif line.startswith('CHL DOPP,'):
                 self.one_sec_row["dopp"] = line
             elif line.startswith("SV INFO"):
@@ -116,8 +119,11 @@ class LogAnalysis:
                         print('The %d row <<%s>> not intact' % (self.row_num, tmp_row))
                         return {}
                 else:
-                    print("nearly %d row, this second  '%s'  not intact" % (self.row_num, aim))
-                    return {}
+                    if aim == 'fix_sv':
+                        pass
+                    else:
+                        print("nearly %d row, this second  '%s'  not existence" % (self.row_num, aim))
+                        return {}
         return ret
 
     def get_time_week_per_sec(self, string):
@@ -139,9 +145,13 @@ class LogAnalysis:
         time_lst = np.array([])
         pli_mean_lst = np.array([])
         cnr_mean_lst = np.array([])
-        target = ["pli", "cnr", "chl_time"]
+        target = ["pli", "cnr", "chl_time", "fix_sv"]
         self.fp.seek(0, 0)
         self.pos = 0
+
+        fix_sv_num_lst = np.array([])
+        trk_sv_num_lst = np.array([])
+
         # start_time = time.time()  # 开始时间
         while self.pos < self.FILE_LEN:
             ret_dict = self.get_target_row(target)
@@ -149,6 +159,11 @@ class LogAnalysis:
                 time_sec = self.get_time_week_per_sec(ret_dict[target[2]])
                 if time_sec == -1:
                     continue
+                if target[3] in ret_dict.keys():
+                    fix_sv_row = ret_dict[target[3]]
+                    fix_sv_num = int(re.findall(r"\d+", fix_sv_row)[0])
+                    fix_sv_num_lst = np.append(fix_sv_num_lst, fix_sv_num)
+
                 pli_row = ret_dict[target[0]]
                 pli_list = pli_cnr_info_prn_parse(pli_row)  # 解析 pli row
                 tmp_arr_pli = []
@@ -157,7 +172,9 @@ class LogAnalysis:
                     if item != '100':
                         tmp_arr_pli.append(int(item))
                         valid_idx_list.append(idx)
-                if len(valid_idx_list) < 2:
+                trk_sv_num = len(valid_idx_list)
+                trk_sv_num_lst = np.append(trk_sv_num_lst, trk_sv_num)
+                if trk_sv_num < 2:
                     continue
                 pli_mean_lst = np.append(pli_mean_lst, np.mean(tmp_arr_pli))
 
@@ -172,7 +189,9 @@ class LogAnalysis:
 
         # end_time = time.time()  # 结束时间
         # print("耗时: %d" % (end_time - start_time))
-        return time_lst, pli_mean_lst, cnr_mean_lst
+        ave_fix_sv_num = np.mean(fix_sv_num_lst)
+        ave_trk_sv_num = np.mean(trk_sv_num_lst)
+        return time_lst, pli_mean_lst, cnr_mean_lst, ave_fix_sv_num, ave_trk_sv_num
 
     @property
     def each_sv_per_sec_cnr(self):
@@ -218,20 +237,60 @@ class LogAnalysis:
 
         return _all_sv_time_, _all_sv_cnr_
 
+    @property
+    def static_pos_analysis(self):
+        target = ["pli", "GGA", "RMC", "chl_time"]
+        self.fp.seek(0, 0)
+        self.pos = 0
+        gga_cnt = 0
+        fix_time_lst = np.array([])
+
+        while self.pos < self.FILE_LEN:
+            ret_dict = self.get_target_row(target)
+            if bool(ret_dict):  # 判断字典是否为空
+                time_sec = self.get_time_week_per_sec(ret_dict[target[4]])
+                if time_sec == -1:
+                    continue
+                gga_cnt += 1
+                pli_row = ret_dict[target[0]]
+                pli_list = pli_cnr_info_prn_parse(pli_row)  # 解析 pli row
+
+
+
+
+                gga_row = ret_dict[target[2]]
+
+
+                prn_row = ret_dict[target[1]]
+                sv_id = pli_cnr_info_prn_parse(prn_row)
+                new_sv_id = [str(int(i) + 1) for i in sv_id]
+
+                cnr_row = ret_dict[target[2]]
+                cnr_list = pli_cnr_info_prn_parse(cnr_row)  # 解析 cnr row
+
+
+
+        return 0
+
+
+
+
 
 if __name__ == '__main__':
     # path_file = "/home/kwq/work/east_window/0204/1_qfn6_newFrm_fixStatRenew_east.log"
-    path_file = "/home/kwq/work/east_window/0203/qfn6_normal_newFrm_addSysChk_0.log"
+    path_file = "/home/kwq/work/out_test/0219/cd_cnr_test1/1_mdl_5daa_newFrm_park.log"
     test = LogAnalysis(path_file, 'r')
-    time_list, pli_mean_list, cnr_mean_list = test.pli_cnr_mean
-
+    time_list, pli_mean_list, cnr_mean_list, ave_sv_num_fix, ave_sv_num_trk = test.pli_cnr_mean
+    print("ave_sv_num_trk = {:.2f}".format(ave_sv_num_trk))
+    print("ave_sv_num_fix = {:.2f}".format(ave_sv_num_fix))
     fig1 = plt.figure(1)
     plt.title("per second pli mean and cnr mean")
     plt.xlabel("sec of week")
     plt.plot(time_list, pli_mean_list, marker='x', label='pli')
     plt.plot(time_list, cnr_mean_list, marker='o', linestyle=':', label='cnr')
+    plt.legend()  # 不加该语句无法显示 label
     plt.draw()
-    plt.pause(5)
+    plt.pause(50)
     plt.close(fig1)
 
     all_sv_time, all_sv_cnr = test.each_sv_per_sec_cnr
