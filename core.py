@@ -4,7 +4,7 @@ import sys
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-from base_function import analysis_gga, Txyz, lla_to_xyz
+from base_function import ecef_to_enu, lla_to_xyz, calc_True_Txyz
 
 # from typing import List, Iterator, Union,
 
@@ -28,7 +28,7 @@ class DrawPicture:
 
 class LogAnalysis:
     def __init__(self, target_file, __purpose__, ubx_file):
-        self.valid_chl_flag = [0, ]
+        self.valid_chl_flag = [0, 9]
         self.cmp_enable = 0
         self.cmp_support = 0
 
@@ -38,6 +38,7 @@ class LogAnalysis:
 
         if isinstance(__purpose__, dict) and len(target_file):
             self.filename = target_file.split('/')[-1]
+            self.path = target_file.split(self.filename)[0]
             self.f_our = open(target_file, 'r', errors="ignore")
             self.purpose = __purpose__.copy()
             _target_row = ["chl_time", ]
@@ -110,7 +111,97 @@ class LogAnalysis:
         plt.close(fig1)
 
     def static_pos_cmp(self, true_xyz):
-        pass
+        all_diff_xyz = []
+        all_EN = []
+        for info in self.all_info_dict['GGA']:
+            if info['valid']:
+                diff_xyz = (np.array(true_xyz) - np.array(info['xyz']))
+                all_diff_xyz.append(diff_xyz)  # 收集点(x,y,z)3个轴的误差
+                ENU = ecef_to_enu(true_xyz[0], true_xyz[1], true_xyz[2], info['lat'], info['lon'], info['high'])
+                all_EN.append(ENU[:2])  # 收集东北
+            else:
+                all_diff_xyz.append([0, 0, 0])
+                all_EN.append([0, 0])
+        all_dis_xyz = [np.linalg.norm(diff_xyz) for diff_xyz in all_diff_xyz]
+        all_dis_EN = [np.linalg.norm(en) for en in all_EN]
+
+        fig1 = plt.figure(1)
+        plt.title("distance with true position")
+        plt.plot(self.all_info_dict['chl_time'], all_dis_xyz, marker='*', label='dis_xyz')
+        plt.plot(self.all_info_dict['chl_time'], all_dis_EN, marker='o', label='dis_EN')
+        plt.legend()  # 不加该语句无法显示 label
+        plt.draw()
+
+        plt.pause(40)  # 间隔的秒数： 4s
+        plt.close(fig1)
+
+    def cnr_cmp(self):
+        all_sv_cnr = {}
+        ubx_sv_cnr = {}
+        time_lst = []
+        diff_cnr = {}
+        diff_time = {}
+        sec = 0
+        for per_sec_info in self.all_info_list:
+            valid_chl = self.all_valid_chl[sec]
+            sec += 1
+            if not valid_chl:
+                continue
+            now_time = per_sec_info['chl_time']
+            ubx_info = self.ubx_info_dict[now_time]
+            time_lst.append(now_time)
+            valid_sv_id_lst = []
+            cnr_8088 = {}
+            cnr_ubx = {}
+            per_sec_cnr = per_sec_info['cnr']
+            per_sec_sv = per_sec_info['prnNOW']
+            for chl in valid_chl:
+                sv_id = per_sec_sv[chl] + 1
+                valid_sv_id_lst.append(sv_id)
+                cnr_8088[sv_id] = per_sec_cnr[chl]
+                if sv_id in all_sv_cnr.keys():
+                    all_sv_cnr[sv_id] += [per_sec_cnr[chl]]
+                else:
+                    all_sv_cnr[sv_id] = [per_sec_cnr[chl]]
+
+                if sv_id > 32:
+                    try:
+                        cnr_ubx[sv_id] = ubx_info['5'][str(sv_id - 32)]['cnr']
+                    except:
+                        valid_sv_id_lst.pop()
+                        continue
+
+                    if sv_id in ubx_sv_cnr.keys():
+                        ubx_sv_cnr[sv_id] += [ubx_info['5'][str(sv_id - 32)]['cnr']]
+                    else:
+                        ubx_sv_cnr[sv_id] = [ubx_info['5'][str(sv_id - 32)]['cnr']]
+                else:
+                    try:
+                        cnr_ubx[sv_id] = ubx_info['0'][str(sv_id)]['cnr']
+                    except:
+                        valid_sv_id_lst.pop()
+                        continue
+
+                    if sv_id in ubx_sv_cnr.keys():
+                        ubx_sv_cnr[sv_id] += [ubx_info['0'][str(sv_id)]['cnr']]
+                    else:
+                        ubx_sv_cnr[sv_id] = [ubx_info['0'][str(sv_id)]['cnr']]
+
+            for sv_id in valid_sv_id_lst:
+                if sv_id not in diff_cnr.keys():
+                    diff_cnr[sv_id] = []
+                    diff_time[sv_id] = []
+                diff_cnr[sv_id].append(float(cnr_ubx[sv_id]) - float(cnr_8088[sv_id]))
+                diff_time[sv_id].append(now_time)
+
+        fig1 = plt.figure(1)
+        plt.title("compare with Ublox cnr")
+        for sv_id in diff_cnr.keys():
+            plt.plot(diff_time[sv_id], diff_cnr[sv_id], marker='*', label='sv' + str(sv_id))
+        plt.legend()  # 不加该语句无法显示 label
+        plt.draw()
+        plt.pause(40)  # 间隔的秒数： 4s
+        plt.close(fig1)
 
 
     def deal_with(self):
@@ -174,7 +265,7 @@ class LogParser(LogAnalysis):
         self.pos = 0
         self.FILE_LEN = self.f_our.seek(0, 2)  # 把文件指针移到文件末尾并移动0
         self.f_our.seek(0, 0)  # 把文件指针移到文件起始并移动0
-
+        print(self.path, self.filename)
         print("目的:", self.purpose, "\n需要解析的行:", self.target_row)
 
     def is_intact(self, string, key_word):
@@ -307,10 +398,9 @@ class LogParser(LogAnalysis):
                     val_our = 0
                     val_ubx = 0
                     tmp_dict = self.parser_ubx_txt()
-                    if bool(tmp_dict):
-                        self.ubx_info_dict[t_our] = tmp_dict
-                    else:
+                    if not bool(tmp_dict):
                         break
+                    self.ubx_info_dict[t_our] = tmp_dict
                     _all_info_list.append(parser_field_dict)
             else:
                 field_dict = self.one_second_field()
@@ -488,7 +578,7 @@ if __name__ == '__main__':
                "xx": ["test"]}
 
     ubx_txt = "/home/kwq/work/out_test/0219/cd_cnr_test1/COM7_210219_074646_F9P.txt"
-    ubx_gga = "/home/kwq/work/out_test/0219/cd_cnr_test1/"
+    ubx_gga = "/home/kwq/work/out_test/0219/cd_cnr_test1/nmea/COM7_210219_074646_F9P.gga"
     for file in file_lst:
         test = LogParser(path+file, purpose, ubx_txt)
 
@@ -497,7 +587,10 @@ if __name__ == '__main__':
         test.parser_file()
 
         '''进行的操作操作'''
-        test.pli_abnormal_pli_mean_cnr_mean()
+        # test.pli_abnormal_pli_mean_cnr_mean()
         end_time = time.time()  # 结束时间
         print("耗时: %d" % (end_time - start_time))
 
+        Txyz, Tlla, mean_err_dis, std_err_dis = calc_True_Txyz(ubx_gga)
+        #test.static_pos_cmp(Txyz)
+        test.cnr_cmp()
