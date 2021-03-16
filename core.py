@@ -2,9 +2,10 @@ import time
 import os
 import sys
 import re
+import openpyxl
 import numpy as np
 import matplotlib.pyplot as plt
-from base_function import ecef_to_enu, lla_to_xyz, calc_True_Txyz
+from base_function import ecef_to_enu, lla_to_xyz, calc_True_Txyz, write_excel_xlsx
 
 # from typing import List, Iterator, Union,
 
@@ -22,15 +23,17 @@ class DrawPicture:
             plt.plot(x_axis, y_axis_dict[key], marker='o', linestyle=':', label=key)
         plt.legend()    # 不加该语句无法显示 label
         plt.draw()
-        plt.pause(50)
+        plt.pause(5)
         plt.close(fig1)
 
 
 class LogAnalysis:
-    def __init__(self, target_file, __purpose__, ubx_file):
+    def __init__(self, target_file, __purpose__, ubx_file, fd_st):
         self.valid_chl_flag = [0, 9]
         self.cmp_enable = 0
         self.cmp_support = 0
+
+        self.fd_st = fd_st
 
         if len(ubx_file):   # 有U-blox的文件
             self.cmp_support = 1
@@ -63,6 +66,7 @@ class LogAnalysis:
         self.ubx_bak_time = 0
 
     def pli_abnormal_pli_mean_cnr_mean(self):
+        _fd_ = open(self.path + 'chart/' + self.filename.split('.')[0] + '_ab_pli.txt', 'w')
         pli_mean = []
         cnr_mean = []
         time_lst = []
@@ -81,7 +85,7 @@ class LogAnalysis:
                 pli_mean.append(np.mean(np.array(pli)))
                 pli_sum = np.sum(pli)
                 if pli_sum / sum_bak > 2 and pli_mean[-1] > 15 and len(pli) > 2:
-                    print(pli_row_bak, per_sec_info['chl_time'], per_sec_info['pli'])
+                    print(pli_row_bak, per_sec_info['chl_time'], per_sec_info['pli'], file=_fd_)
                     abnormal_pli_cnt += 1
                 sum_bak = pli_sum
             else:
@@ -96,9 +100,15 @@ class LogAnalysis:
                 cnr_mean.append(np.mean(np.array(cnr)))
             else:
                 cnr_mean.append(60)
+        _fd_.close()
         print("abnormal pli rate = {:.2%}".format(abnormal_pli_cnt / len(pli_mean)))
         print("mean(pli_mean) = {:.2f}, std(pli_mean) = {:.2f}".format(np.mean(pli_mean), np.std(pli_mean)))
         print("mean(cnr_mean) = {:.2f}, std(cnr_mean) = {:.2f}".format(np.mean(cnr_mean), np.std(cnr_mean)))
+        if self.fd_st:
+            print("{:.3f}|{:.3f}|{:.3%}|{:.3f}|{:.3f}".format(
+                np.mean(pli_mean), np.std(pli_mean), abnormal_pli_cnt / len(pli_mean),
+                np.mean(cnr_mean), np.std(cnr_mean)), end='|', file=self.fd_st)
+
         fig1 = plt.figure(1)
         plt.title("per sec pli list's mean and cnr list's mean")
         plt.plot(time_lst, pli_mean, marker='*', label='pli')
@@ -107,40 +117,88 @@ class LogAnalysis:
         plt.draw()
         # plt.savefig(path + "chart/" + file[:-4] + "_per_sec_pli_cnr.png")
         # plt.show()
-        plt.pause(40)  # 间隔的秒数： 4s
+        plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
     def static_pos_cmp(self, true_xyz):
+        RMC_list = self.all_info_dict['RMC']
+        time_list = self.all_info_dict['chl_time']
         all_diff_xyz = []
         all_EN = []
+        time_pos = []
+        diff_vel = []
+        time_vel = []
+        gga_1_rmc_N = 0
+        sec = 0
         for info in self.all_info_dict['GGA']:
+            rmc_dict = RMC_list[sec]
+            SoW = time_list[sec]        # second of week
+
             if info['valid']:
                 diff_xyz = (np.array(true_xyz) - np.array(info['xyz']))
                 all_diff_xyz.append(diff_xyz)  # 收集点(x,y,z)3个轴的误差
                 ENU = ecef_to_enu(true_xyz[0], true_xyz[1], true_xyz[2], info['lat'], info['lon'], info['high'])
                 all_EN.append(ENU[:2])  # 收集东北
+                time_pos.append(SoW)
+
+            if rmc_dict['valid']:
+                diff_vel.append(rmc_dict['speed'])
+                time_vel.append(SoW)
             else:
-                all_diff_xyz.append([0, 0, 0])
-                all_EN.append([0, 0])
+                if info['valid']:
+                    gga_1_rmc_N += 1
+            sec += 1
+
         all_dis_xyz = [np.linalg.norm(diff_xyz) for diff_xyz in all_diff_xyz]
         all_dis_EN = [np.linalg.norm(en) for en in all_EN]
+        len_tmp = len(time_list)
+        print("fix rate = {:.3%}, warning rate = {:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp))
+        if self.fd_st:
+            self.sort_and_print_50_95_99(all_dis_xyz, "all_dis_xyz")
+            self.sort_and_print_50_95_99(all_dis_EN, "all_dis_EN")
+            self.sort_and_print_50_95_99(diff_vel, "diff_vel")
+            print("{:.3%}|{:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp),
+                  end='|', file=self.fd_st)
 
         fig1 = plt.figure(1)
         plt.title("distance with true position")
-        plt.plot(self.all_info_dict['chl_time'], all_dis_xyz, marker='*', label='dis_xyz')
-        plt.plot(self.all_info_dict['chl_time'], all_dis_EN, marker='o', label='dis_EN')
+        plt.plot(time_pos, all_dis_xyz, marker='*', label='dis_xyz')
+        plt.plot(time_pos, all_dis_EN, marker='o', label='dis_EN')
         plt.legend()  # 不加该语句无法显示 label
         plt.draw()
 
-        plt.pause(40)  # 间隔的秒数： 4s
+        plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
+    def sort_and_print_50_95_99(self, aim_list, keyword):
+        sort_list = np.sort(aim_list)
+        len_tmp = len(sort_list)
+        percentage_50 = sort_list[int(len_tmp * 0.5)]
+        percentage_95 = sort_list[int(len_tmp * 0.95)]
+        percentage_99 = sort_list[int(len_tmp * 0.99)]
+        std_list = np.std(sort_list)
+        print(keyword + " 50% = {:f}, 95% = {:f}, 99% = {:f}, std = {:f}"
+              .format(percentage_50, percentage_95, percentage_99, std_list))
+        print("{:.3f}|{:.3f}|{:.3f}|{:.3f}".format(percentage_50, percentage_95, percentage_99, std_list),
+              end='|', file=self.fd_st)
+
     def cnr_cmp(self):
+        head_xlsx = [['', "[ublox每一秒的CNR]该列表的均值和标准差", '', "[8088每一秒的CNR]该列表的均值和标准差", '',
+                      "[每一秒各个卫星的载噪比与ublox的载噪比之差] 该列表 的均值和标准差"],
+                     ['', 'ubx_ave', 'ubx_std', 'Our_ave', 'Our_std', 'diff_ave', 'diff_std', 'cnt'],
+                     [self.filename, ]]
+        book_name_xlsx = self.path + 'chart/' + self.filename.split('.')[0] + '_cnr_compare.xlsx'
+
+        wb = openpyxl.Workbook()    # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
+        ws = wb.active              # 获取当前活跃的worksheet,默认就是第一个worksheet
+        row_xlsx = write_excel_xlsx(ws, head_xlsx, row_cnt=0)
+
         all_sv_cnr = {}
         ubx_sv_cnr = {}
         time_lst = []
         diff_cnr = {}
         diff_time = {}
+        per_sec_cnr_mean = []
         sec = 0
         for per_sec_info in self.all_info_list:
             valid_chl = self.all_valid_chl[sec]
@@ -187,21 +245,110 @@ class LogAnalysis:
                     else:
                         ubx_sv_cnr[sv_id] = [ubx_info['0'][str(sv_id)]['cnr']]
 
+            tmp_diff_sum = 0
             for sv_id in valid_sv_id_lst:
+                tmp_diff = float(cnr_ubx[sv_id]) - float(cnr_8088[sv_id])
+                tmp_diff_sum += tmp_diff
                 if sv_id not in diff_cnr.keys():
                     diff_cnr[sv_id] = []
                     diff_time[sv_id] = []
-                diff_cnr[sv_id].append(float(cnr_ubx[sv_id]) - float(cnr_8088[sv_id]))
+                diff_cnr[sv_id].append(tmp_diff)
                 diff_time[sv_id].append(now_time)
+            tmp_len = len(valid_sv_id_lst)
+            if tmp_len:
+                per_sec_cnr_mean.append(tmp_diff_sum/tmp_len)
+        print(
+            f"mean([per_sec_cnr_mean]) = {np.mean(per_sec_cnr_mean):f}, "
+            f"std([per_sec_cnr_mean]) = {np.std(per_sec_cnr_mean):f}")
+        if self.fd_st:
+            print("{:.3f}|{:.3f}".format(np.mean(per_sec_cnr_mean), np.std(per_sec_cnr_mean)), end='|', file=self.fd_st)
+        # fig1 = plt.figure(1)
+        # plt.title("compare with Ublox cnr")
+        # for sv_id in diff_cnr.keys():
+        #     plt.plot(diff_time[sv_id], diff_cnr[sv_id], marker='*', label='sv' + str(sv_id))
+        # plt.legend()  # 不加该语句无法显示 label
+        # plt.draw()
+        # plt.pause(40)  # 间隔的秒数： 4s
+        # plt.close(fig1)
 
-        fig1 = plt.figure(1)
-        plt.title("compare with Ublox cnr")
-        for sv_id in diff_cnr.keys():
-            plt.plot(diff_time[sv_id], diff_cnr[sv_id], marker='*', label='sv' + str(sv_id))
-        plt.legend()  # 不加该语句无法显示 label
-        plt.draw()
-        plt.pause(40)  # 间隔的秒数： 4s
-        plt.close(fig1)
+        for key in diff_cnr.keys():
+            diff_mean = round(np.mean(diff_cnr[key]), 3)
+            diff_std = round(np.std(diff_cnr[key]), 3)
+            our_mean = round(np.mean(all_sv_cnr[key]), 3)
+            our_std = round(np.std(all_sv_cnr[key]), 3)
+            ubx_mean = round(np.mean(ubx_sv_cnr[key]), 3)
+            ubx_std = round(np.std(ubx_sv_cnr[key]), 3)
+
+            write_value = [['sv' + str(key), ubx_mean, ubx_std, our_mean, our_std, diff_mean, diff_std, len(diff_cnr[key])]]
+            row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+        wb.save(book_name_xlsx)
+
+    def chl_class_deal(self, aim, ab_value):
+        sec = 0
+        time_lst = []
+        all_sv_aim = {}
+        ubx_sv_aim = {}
+        diff_time = {}
+        diff_aim = {}
+        per_sec_aim_mean = []
+
+        for per_sec_info in self.all_info_list:
+            valid_chl = self.all_valid_chl[sec]
+            sec += 1
+            if not valid_chl:
+                continue
+            now_time = per_sec_info['chl_time']
+            ubx_info = self.ubx_info_dict[now_time]
+            time_lst.append(now_time)
+            valid_sv_id_lst = []
+            aim_8088 = {}
+            aim_ubx = {}
+            per_sec_aim = per_sec_info[aim]
+            per_sec_sv = per_sec_info['prnNOW']
+            for chl in valid_chl:
+                sv_id = per_sec_sv[chl] + 1
+                valid_sv_id_lst.append(sv_id)
+                aim_8088[sv_id] = per_sec_aim[chl]
+                if sv_id in all_sv_aim.keys():
+                    all_sv_aim[sv_id] += [per_sec_aim[chl]]
+                else:
+                    all_sv_aim[sv_id] = [per_sec_aim[chl]]
+
+                if sv_id > 32:
+                    try:
+                        aim_ubx[sv_id] = ubx_info['5'][str(sv_id - 32)][aim]
+                    except:
+                        valid_sv_id_lst.pop()
+                        continue
+
+                    if sv_id in ubx_sv_aim.keys():
+                        ubx_sv_aim[sv_id] += [ubx_info['5'][str(sv_id - 32)][aim]]
+                    else:
+                        ubx_sv_aim[sv_id] = [ubx_info['5'][str(sv_id - 32)][aim]]
+                else:
+                    try:
+                        aim_ubx[sv_id] = ubx_info['0'][str(sv_id)][aim]
+                    except:
+                        valid_sv_id_lst.pop()
+                        continue
+
+                    if sv_id in ubx_sv_aim.keys():
+                        ubx_sv_aim[sv_id] += [ubx_info['0'][str(sv_id)][aim]]
+                    else:
+                        ubx_sv_aim[sv_id] = [ubx_info['0'][str(sv_id)][aim]]
+
+            tmp_diff_sum = 0
+            for sv_id in valid_sv_id_lst:
+                tmp_diff = float(aim_ubx[sv_id]) - float(aim_8088[sv_id])
+                tmp_diff_sum += tmp_diff
+                if sv_id not in diff_aim.keys():
+                    diff_aim[sv_id] = []
+                    diff_time[sv_id] = []
+                diff_aim[sv_id].append(tmp_diff)
+                diff_time[sv_id].append(now_time)
+            tmp_len = len(valid_sv_id_lst)
+            if tmp_len:
+                per_sec_aim_mean.append(tmp_diff_sum/tmp_len)
 
 
     def deal_with(self):
@@ -247,7 +394,7 @@ class LogAnalysis:
 
 class LogParser(LogAnalysis):
     purpose_need_row = {"cnr": ["cnr", "svINFO", "prnNOW"], "pli": ["pli", "svINFO", "prnNOW"],
-                        "pos": ["GGA", ]}
+                        "pos": ["GGA", "RMC"], "PR": ["PR", "svINFO", "prnNOW"], "dopp": ["dopp", "svINFO", "prnNOW"]}
     row_flag_dict = {"cnr": ['cnr:', ''], "pli": ['pli ', ''], "svINFO": ['SV INFO', ''], "prnNOW": ['PRN NOW', ''],
                      "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ''],
                      "chl_time": ['CHL TIME,', ''],
@@ -257,8 +404,8 @@ class LogParser(LogAnalysis):
                  "svINFO": 9, "prnNOW": 9, "fix_sv": 2,
                  "cnr": 9, "pli": 9}
 
-    def __init__(self, target_file: str, __purpose__: dict, ubx_file=''):
-        super().__init__(target_file, __purpose__, ubx_file)
+    def __init__(self, target_file: str, __purpose__: dict, ubx_file='', fd_st=''):
+        super().__init__(target_file, __purpose__, ubx_file, fd_st)
         self.row_cnt = 0
         self.restart = 0
         self.time_bak = -1
@@ -571,26 +718,33 @@ class LogParser(LogAnalysis):
 if __name__ == '__main__':
     # path = "/home/kwq/work/east_window/0302_night/"
     # file_lst = ["1_mdl5daa_memDbg_east.log"]
-
     path = "/home/kwq/work/out_test/0219/cd_cnr_test1/"
     file_lst = ["1_mdl_5daa_newFrm_park.log", "COM7_210219_074646_F9P.txt"]
     purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],
-               "xx": ["test"]}
+               "PR": ["cmp"], "dopp": ["cmp"]}
 
     ubx_txt = "/home/kwq/work/out_test/0219/cd_cnr_test1/COM7_210219_074646_F9P.txt"
     ubx_gga = "/home/kwq/work/out_test/0219/cd_cnr_test1/nmea/COM7_210219_074646_F9P.gga"
+    fd_summary_table = open(path + 'chart/summary_table.md', 'w')
+    print("log|||||pos||||||vel|||||pli|| |cnr| | |", file=fd_summary_table)
+    print(":-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|",
+          file=fd_summary_table)
+    print(".|sep50|sep95|sep99|sep std|cep50|cep95|cep99|cep std|v50|v95|v99|v std|fix rate|warning rate|"
+          "mean|std|abnormal rate|mean|std|diff mean|diff std|", file=fd_summary_table)
+    Txyz, Tlla, mean_err_dis, std_err_dis = calc_True_Txyz(ubx_gga)
+
     for file in file_lst:
-        test = LogParser(path+file, purpose, ubx_txt)
+        print(file, end='|', file=fd_summary_table)
+        test = LogParser(path+file, purpose, ubx_txt, fd_summary_table)
 
         start_time = time.time()  # 开始时间
 
         test.parser_file()
 
         '''进行的操作操作'''
-        # test.pli_abnormal_pli_mean_cnr_mean()
+        test.static_pos_cmp(Txyz)
+        test.pli_abnormal_pli_mean_cnr_mean()
         end_time = time.time()  # 结束时间
         print("耗时: %d" % (end_time - start_time))
 
-        Txyz, Tlla, mean_err_dis, std_err_dis = calc_True_Txyz(ubx_gga)
-        #test.static_pos_cmp(Txyz)
         test.cnr_cmp()
