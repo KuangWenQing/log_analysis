@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://earth.google.com/kml/2.1">
+<Document>
+  <name>Track Log</name>
+  <description>Route</description>
+  <Style id="roadStyle">
+    <LineStyle>
+      <color>ff4444ff</color>
+      <width>3</width>
+    </LineStyle>
+  </Style>
+  <Style id="blueDot">
+    <IconStyle>
+      <Icon>
+        <href>http://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <Placemark>
+    <name>Route</name>
+    <styleUrl>#roadStyle</styleUrl>
+    <MultiGeometry>
+      <LineString><coordinates>104.0232433,30.6277467,113.714 104.0247383,30.6278667,113.714 104.0266233,30.6278317,113.714 104.0256617,30.6291433,113.714 104.0255450,30.6316400,113.714 104.0247933,30.6321633,113.714 0.0000000,0.0000000,113.714 104.0283800,30.6346933,113.714 104.0272183,30.6364833,113.714 104.0301283,30.6339417,113.714</coordinates></LineString>
+    </MultiGeometry>
+  </Placemark>
+  <Folder>
+    <name>waypoints</name>
+    <Placemark>
+      <name>02:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0232433,30.6277467,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>03:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0247383,30.6278667,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>04:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0266233,30.6278317,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>05:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0256617,30.6291433,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>06:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0255450,30.6316400,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>07:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0247933,30.6321633,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>08:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>0.0000000,0.0000000,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>09:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0283800,30.6346933,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>10:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0272183,30.6364833,113.714</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>11:00</name>
+      <styleUrl>#blueDot</styleUrl>
+      <Point><coordinates>104.0301283,30.6339417,113.714</coordinates></Point>
+    </Placemark>
+  </Folder>
+</Document>
+</kml>

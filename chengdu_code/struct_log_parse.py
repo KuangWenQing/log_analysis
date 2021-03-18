@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-path_file = "/home/kwq/project/C/codelite_proj/struct_data_parse/struct_parse/log/0314"
+path_file = "/home/kwq/project/C/codelite_proj/struct_data_parse/struct_parse/log/0317"
 
 gga = "$GPGGA,024028.00,4000.0013,N,11559.9974,E,1,10,1.22,113.714,M,-8.00,M,,*78"
 gga_head = "$GPGGA,"
