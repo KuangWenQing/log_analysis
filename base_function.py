@@ -200,19 +200,6 @@ def write_excel_xlsx(sheet, value, row_cnt=0):
     return row_cnt
 
 
-num_argv = len(sys.argv)
-if num_argv < 2:
-    path = "/home/kwq/work/lab_test/0201_onenight/"
-
-    F9P_file = path + 'COM8_210201_120953_F9P.txt'
-else:
-    path = sys.argv[1]
-    F9P_file = path + sys.argv[2]
-
-file_list = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
-file_list.sort()
-
-
 '''alt = 361.31     # 实验室窗户
 lat = convert_ll_to_float("2936.1604")
 lon = convert_ll_to_float("10618.0286")'''
@@ -235,13 +222,8 @@ Txyz = lla_to_xyz(lat, lon, alt)    # 米 （X Y Z）
 Tlat = degree_to_dms(str(Tlla[0]))[0]   # 度分秒 纬度
 Tlon = degree_to_dms(str(Tlla[1]))[0]   # 度分秒 经度
 
-f9p_gga = path + 'nmea/' + [f for f in os.listdir(path + 'nmea/') if f.endswith('F9P.gga')][0]
-f9p_RMC_GGA = path + 'nmea/' + [f for f in os.listdir(path + 'nmea/') if f.endswith('F9P.rmcgga')][0]
 
-print(f9p_gga)
-
-
-def calc_True_Txyz(path_file=f9p_gga):
+def calc_True_Txyz(path_file):
     # gga中 经度纬度高度的位置
     lat_pos = 1
     lon_pos = 3
@@ -276,6 +258,22 @@ def calc_True_Txyz(path_file=f9p_gga):
 
 
 if __name__ == "__main__":
+    num_argv = len(sys.argv)
+    if num_argv < 2:
+        path = "/home/kwq/work/lab_test/0201_onenight/"
+
+        F9P_file = path + 'COM8_210201_120953_F9P.txt'
+    else:
+        path = sys.argv[1]
+        F9P_file = path + sys.argv[2]
+
+    file_list = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
+    file_list.sort()
+    f9p_gga = path + 'nmea/' + [f for f in os.listdir(path + 'nmea/') if f.endswith('F9P.gga')][0]
+    f9p_RMC_GGA = path + 'nmea/' + [f for f in os.listdir(path + 'nmea/') if f.endswith('F9P.rmcgga')][0]
+
+    print(f9p_gga)
+
     Txyz, Tlla, mean_err_dis, std_err_dis = calc_True_Txyz(f9p_gga)
     print('F9P 均值点 作为 真值点')
     """米"""
