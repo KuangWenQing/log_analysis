@@ -12,9 +12,9 @@ from base_function import calc_True_Txyz
 if __name__ == '__main__':
     num_argv = len(sys.argv)
     if num_argv < 2:
-        path = "/home/kwq/work/east_window/0318/"
-        ubx_txt = path + "COM7_210318_115719_F9P.txt"
-        ubx_gga = path + "nmea/COM7_210318_115719_F9P.gga"
+        path = "/home/kwq/work/east_window/0316/"
+        ubx_txt = path + "COM3_210316_114345_F9P.txt"
+        ubx_gga = path + "nmea/COM3_210316_114345_F9P.gga"
     else:
         path = sys.argv[1]
         ubx_txt = path + sys.argv[2]

@@ -326,7 +326,7 @@ class LogAnalysis:
         wb.save(book_name_xlsx)
         wb.close()
 
-    def pr_dopp_union(self, aim, ab_value=0):
+    def pr_dopp_union(self, aim, cmp_value=0):
         abnormal_cnt = 0
         fd_ab = open(self.path + 'chart/' + self.filename.split('.')[0] + "_abnormal_" + aim + ".txt", 'w')
         sec = 0
@@ -338,6 +338,10 @@ class LogAnalysis:
         per_sec_diff_diff_aim_mean = []     # [mean[差值 - 差值的均值]]
 
         for per_sec_info in self.all_info_list:
+            try:
+                per_sec_sv = per_sec_info['prnNOW']
+            except:
+                continue
             valid_chl = self.all_valid_chl[sec]
             sec += 1
             if not valid_chl:
@@ -352,7 +356,7 @@ class LogAnalysis:
                 per_sec_aim = per_sec_info[aim]
             except:
                 continue
-            per_sec_sv = per_sec_info['prnNOW']
+            # per_sec_sv = per_sec_info['prnNOW']
             for chl in valid_chl:
                 sv_id = per_sec_sv[chl] + 1
                 valid_sv_id_lst.append(sv_id)
@@ -390,30 +394,36 @@ class LogAnalysis:
                 diff_dict = {}
                 diff_list = []
                 for sv_id in valid_sv_id_lst:
-                    tmp_diff = np.fabs(float(aim_ubx[sv_id]) - float(aim_8088[sv_id]))  # 差值
-
+                    tmp_diff = round(np.fabs(float(aim_ubx[sv_id]) - float(aim_8088[sv_id])), 2)    # 差值
                     diff_dict[sv_id] = tmp_diff
                     diff_list.append(tmp_diff)
+
                 tmp_mean = np.mean(diff_list)     # 与ubx的差 的均值
                 diff_diff_mean_lst = []
                 for sv_id in valid_sv_id_lst:
-                    diff_diff_mean = np.fabs(diff_dict[sv_id] - tmp_mean)
+                    diff_diff_mean = round(np.fabs(diff_dict[sv_id] - tmp_mean), 2)
                     diff_diff_mean_lst.append(diff_diff_mean)
                     if sv_id not in diff_aim.keys():
                         diff_aim[sv_id] = []
                         diff_time[sv_id] = []
                     diff_aim[sv_id].append(diff_diff_mean)
                     diff_time[sv_id].append(now_time)
-                per_sec_diff_diff_aim_mean.append(np.mean(diff_diff_mean_lst))   # [mean[差值 - 差值的均值]]
-                if tmp_len > 2 and ab_value:
-                    abnormal_idx = find_abnormal_data(diff_diff_mean_lst)
-                    abnormal_diff = diff_diff_mean_lst[abnormal_idx[0]]
-                    if abnormal_diff > ab_value:
+                draw_value = round(np.mean(diff_diff_mean_lst), 2)  # mean[差值 - 差值的均值]
+                per_sec_diff_diff_aim_mean.append(draw_value)
+                if tmp_len > 2 and cmp_value:
+                    abnormal_idx = find_abnormal_data(diff_list)
+                    ab_sv = valid_sv_id_lst[abnormal_idx[0]]
+                    ab_diff = diff_list.pop(abnormal_idx[0])
+                    tmp_mean = np.mean(diff_list)  # 与ubx的差 去除最异常的值后 的均值
+                    ab_diff_diff = round(np.fabs(ab_diff - tmp_mean), 2)
+                    if ab_diff_diff > cmp_value:
                         abnormal_cnt += 1
-                        print("abnormal_sv =", valid_sv_id_lst[abnormal_idx[0]], "time =", now_time,
+                        if draw_value > cmp_value*10:
+                            print("attention", file=fd_ab)
+                        print("time=", now_time, "ab_diff_diff=", ab_diff_diff, "ab_draw=", draw_value, "ab_sv=", ab_sv,
                               "\nsv =", per_sec_sv, "\npli =", per_sec_info['pli'], "\ncnr =", per_sec_info['cnr'],
-                              "\n" + aim, aim_8088, "\ndiff =", diff_dict,
-                              "\ndiff_diff_mean =", diff_diff_mean_lst, file=fd_ab)
+                              "\n" + aim, aim_8088, "\ndiff =", diff_dict,  #"\n", file=fd_ab)
+                              "\ndiff_diff_mean =", diff_diff_mean_lst, "\n", file=fd_ab)
 
         return time_lst, per_sec_diff_diff_aim_mean, diff_aim, abnormal_cnt
 
