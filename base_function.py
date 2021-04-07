@@ -187,16 +187,16 @@ def find_abnormal_data(arr=[]):
     return idx
 
 
-def write_excel_xlsx(sheet, value, row_cnt=0):
+def write_excel_xlsx(sheet, value, row_cnt=1):
     """ sheet 工作簿
         value 是写的内容
         row_cnt 表示写到表格第几行"""
 
     index = len(value)
     for i in range(0, index):
-        row_cnt += 1
         for j in range(0, len(value[i])):
             sheet.cell(row=row_cnt, column=j+1, value=str(value[i][j]))
+        row_cnt += 1
     return row_cnt
 
 

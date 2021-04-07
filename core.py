@@ -32,7 +32,7 @@ class DrawPicture:
 
 class LogAnalysis:
     def __init__(self, target_file, __purpose__, ubx_file, fd_st):
-        self.valid_chl_flag = [0, ]
+        self.valid_chl_flag = [0, ]  # 9, 3, 1, 2]
         self.cmp_enable = 0
         self.cmp_support = 0
 
@@ -43,7 +43,7 @@ class LogAnalysis:
             self.f_ubx = open(ubx_file, 'r', errors="ignore")
 
         if isinstance(__purpose__, dict) and len(target_file):
-            self.filename = target_file.split('/')[-1]
+            self.filename = os.path.split(target_file)[1]
             self.path = target_file.split(self.filename)[0]
             self.f_our = open(target_file, 'r', errors="ignore")
             self.purpose = __purpose__.copy()
@@ -72,12 +72,16 @@ class LogAnalysis:
     def final_pos_analysis(self, true_xyz):
         original_str = self.final_pos_str
         print(original_str)
-        str_xyz = original_str[original_str.index('xyz,') + 5: original_str.index(', idx')]
+        try:
+            str_xyz = original_str[original_str.index('xyz,') + 5: original_str.index(', idx')]
+        except:
+            print("no DEBUG R AVE|no DEBUG R AVE", end='|', file=self.fd_st)
+            return 0
         str_xyz = str_xyz.split(',')
         final_xyz = list([float(x) for x in str_xyz])
         final_lla = xyz_to_lla(final_xyz[0], final_xyz[1], final_xyz[2])
         final_enu = ecef_to_enu(true_xyz[0], true_xyz[1], true_xyz[2], final_lla[0], final_lla[1], final_lla[2])
-        print("\n8088 最终定位位置:", final_lla)
+        print("8088 最终定位位置:", final_lla)
         final_lat = degree_to_dms(str(final_lla[0]))[0]
         final_lon = degree_to_dms(str(final_lla[1]))[0]
         print(final_lat, final_lon, final_lla[2])
@@ -185,9 +189,9 @@ class LogAnalysis:
         len_tmp = len(time_list)
         print("fix rate = {:.3%}, warning rate = {:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp))
         if self.fd_st:
-            self.sort_and_print_50_95_99(all_dis_xyz, "all_dis_xyz")
-            self.sort_and_print_50_95_99(all_dis_EN, "all_dis_EN")
-            self.sort_and_print_50_95_99(diff_vel, "diff_vel")
+            self.sort_and_print_50_95_99(all_dis_xyz, "all_dis_xyz", 1)
+            self.sort_and_print_50_95_99(all_dis_EN, "all_dis_EN", 1)
+            self.sort_and_print_50_95_99(diff_vel, "diff_vel", 1)
             print("{:.3%}|{:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp),
                   end='|', file=self.fd_st)
 
@@ -201,7 +205,54 @@ class LogAnalysis:
         plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
-    def sort_and_print_50_95_99(self, aim_list, keyword):
+    def _cmp_with_true_pos_(self, true_xyz, aim="GGA"):
+        time_list = self.all_info_dict['chl_time']
+        all_diff_xyz = []
+        all_EN = []
+        time_lst = []
+        sec = 0
+        for info in self.all_info_dict[aim]:
+
+            SoW = time_list[sec]        # second of week
+
+            if info['valid']:
+                diff_xyz = (np.array(true_xyz) - np.array(info['xyz']))
+                all_diff_xyz.append(diff_xyz)  # 收集点(x,y,z)3个轴的误差
+                ENU = ecef_to_enu(true_xyz[0], true_xyz[1], true_xyz[2], info['lat'], info['lon'], info['high'])
+                all_EN.append(ENU[:2])  # 收集东北
+                time_lst.append(SoW)
+            sec += 1
+
+        all_dis_xyz = [np.linalg.norm(diff_xyz) for diff_xyz in all_diff_xyz]
+        all_dis_EN = [np.linalg.norm(en) for en in all_EN]
+        return time_lst, all_dis_EN, all_dis_xyz
+
+    def ls_igg_cmp_with_true(self, true_xyz):
+        dict_ls = dict(zip(["time", "EN", "ENU"], self._cmp_with_true_pos_(true_xyz, "GGA")))
+        dict_igg = dict(zip(["time", "EN", "ENU"], self._cmp_with_true_pos_(true_xyz, "GGAIGG")))
+        taget_dict = {"ls": dict_ls, "igg": dict_igg}
+
+        len_tmp = len(dict_ls["time"])
+        if len_tmp:
+            self.sort_and_print_50_95_99(dict_ls["ENU"], "ls_ENU")
+            self.sort_and_print_50_95_99(dict_ls["EN"], "ls_EN")
+            self.sort_and_print_50_95_99(dict_igg["ENU"], "igg_ENU")
+            self.sort_and_print_50_95_99(dict_igg["EN"], "igg_EN")
+        self.draw_in_one_pic(taget_dict, save_name="_ls_igg")
+
+    def draw_in_one_pic(self, target_dict, title="distance with true position", save_name=''):
+        fig1 = plt.figure(1)
+        plt.title(title)
+        for key in target_dict.keys():
+            plt.plot(target_dict[key]["time"], target_dict[key]["ENU"], marker='*', label=key + 'ENU')
+            plt.plot(target_dict[key]["time"], target_dict[key]["EN"], marker='o', label=key + 'EN')
+        plt.legend()  # 不加该语句无法显示 label
+        plt.draw()
+        plt.savefig(self.path + 'chart/' + self.filename[:-4] + save_name + '_cmp_pos.png')
+        plt.pause(110)  # 间隔的秒数： 11s
+        plt.close(fig1)
+
+    def sort_and_print_50_95_99(self, aim_list, keyword, chart=0):
         sort_list = np.sort(aim_list)
         len_tmp = len(sort_list)
         percentage_50 = sort_list[int(len_tmp * 0.5)]
@@ -210,13 +261,14 @@ class LogAnalysis:
         std_list = np.std(sort_list)
         print(keyword + " 50% = {:f}, 95% = {:f}, 99% = {:f}, std = {:f}"
               .format(percentage_50, percentage_95, percentage_99, std_list))
-        print("{:.3f}|{:.3f}|{:.3f}|{:.3f}".format(percentage_50, percentage_95, percentage_99, std_list),
-              end='|', file=self.fd_st)
+        if chart:
+            print("{:.3f}|{:.3f}|{:.3f}|{:.3f}".format(percentage_50, percentage_95, percentage_99, std_list),
+                  end='|', file=self.fd_st)
 
     def cnr_cmp(self):
-        head_xlsx = [['', "[ublox每一秒的CNR]该列表的均值和标准差", '', "[8088每一秒的CNR]该列表的均值和标准差", '',
-                      "[每一秒各个卫星的载噪比与ublox的载噪比之差] 该列表 的均值和标准差"],
-                     ['', 'ubx_ave', 'ubx_std', 'Our_ave', 'Our_std', 'diff_ave', 'diff_std', 'cnt'],
+        head_xlsx = [['说明', "[F9P每一秒的CNR]该列表的均值和标准差", '', "[8088每一秒的CNR]该列表的均值和标准差", '',
+                      "[每一秒各个卫星的载噪比与F9P的载噪比之差] 该列表 的均值和标准差"],
+                     ['', 'f9p_ave', 'f9p_std', '8088_ave', '8088_std', 'f9p-8088(ave)', 'f9p-8088(std)', 'cnt'],
                      [self.filename, ]]
         book_name_xlsx = self.path + 'chart/' + '_compare_cnr.xlsx'
 
@@ -226,11 +278,12 @@ class LogAnalysis:
             row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row+1)
+
+            row_xlsx = write_excel_xlsx(ws, [['.'], [self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, row_cnt=0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         all_sv_cnr = {}
         ubx_sv_cnr = {}
@@ -418,11 +471,11 @@ class LogAnalysis:
                     ab_diff_diff = round(np.fabs(ab_diff - tmp_mean), 2)
                     if ab_diff_diff > cmp_value:
                         abnormal_cnt += 1
-                        if draw_value > cmp_value*10:
+                        if draw_value > cmp_value * 10:
                             print("attention", file=fd_ab)
                         print("time=", now_time, "ab_diff_diff=", ab_diff_diff, "ab_draw=", draw_value, "ab_sv=", ab_sv,
                               "\nsv =", per_sec_sv, "\npli =", per_sec_info['pli'], "\ncnr =", per_sec_info['cnr'],
-                              "\n" + aim, aim_8088, "\ndiff =", diff_dict,  #"\n", file=fd_ab)
+                              "\n" + aim, aim_8088, "\ndiff =", diff_dict,  # "\n", file=fd_ab)
                               "\ndiff_diff_mean =", diff_diff_mean_lst, "\n", file=fd_ab)
 
         return time_lst, per_sec_diff_diff_aim_mean, diff_aim, abnormal_cnt
@@ -438,11 +491,12 @@ class LogAnalysis:
             row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row+1)
+
+            row_xlsx = write_excel_xlsx(ws, [['.'], [self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, row_cnt=0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('PR', 100)
         print(
@@ -478,14 +532,15 @@ class LogAnalysis:
         try:
             wb = openpyxl.load_workbook(book_name_xlsx)
             ws = wb.active
-            row = 1
+            row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row + 1)
+
+            row_xlsx = write_excel_xlsx(ws, [['.'], [self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, row_cnt=0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('dopp', 5)
         print(
@@ -556,12 +611,13 @@ class LogAnalysis:
 
 class LogParser(LogAnalysis):
     purpose_need_row = {"cnr": ["cnr", "svINFO", "prnNOW"], "pli": ["pli", "svINFO", "prnNOW"],
-                        "pos": ["GGA", "RMC"], "PR": ["PR", "svINFO", "prnNOW"], "dopp": ["dopp", "svINFO", "prnNOW"]}
+                        "pos": ["GGA", "RMC", "GGAIGG"],
+                        "PR": ["PR", "svINFO", "prnNOW"], "dopp": ["dopp", "svINFO", "prnNOW"]}
     row_flag_dict = {"cnr": ['cnr:', ''], "pli": ['pli ', ''], "svINFO": ['SV INFO', ''], "prnNOW": ['PRN NOW', ''],
                      "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ''],
-                     "chl_time": ['CHL TIME,', ''],
+                     "chl_time": ['CHL TIME,', ''], "GGAIGG": ['$GGAIGG', ''],
                      "dopp": ['CHL DOPP,', 'ir'], 'PR': ['CHL PR,', 'ir'], "fix_sv": ['PV, val num', '']}
-    NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14,
+    NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14, "GGAIGG": 14,
                  "chl_time": 3, "dopp": 11, "PR": 10,
                  "svINFO": 9, "prnNOW": 9, "fix_sv": 2,
                  "cnr": 9, "pli": 9}
@@ -711,13 +767,12 @@ class LogParser(LogAnalysis):
                 td = t_our - t_ubx
                 if td > max_td:
                     val_our = 1
-
                 elif td < -max_td:
                     val_ubx = 1
-
                 else:
                     val_our = 1
                     val_ubx = 1
+
                 if val_our and val_ubx:     # time match!
                     val_our = 0
                     val_ubx = 0
@@ -817,7 +872,7 @@ class LogParser(LogAnalysis):
             ret = self.second_of_week(row)
             _result_ = {row_flag: ret}        # float
 
-        elif row_flag == "GGA" or row_flag == "GGAKF" or row_flag == "GFM":
+        elif row_flag == "GGA" or row_flag == "GGAKF" or row_flag == "GFM" or row_flag == "GGAIGG":
             GGA = row.split(',')
             if GGA[6] == '1':
                 alt = float(GGA[9])         # 海拔
@@ -912,7 +967,7 @@ def delete_file(pathname):
         os.remove(pathname)
         # os.unlink(path)   # 删除一个正在使用的文件会报错
     else:
-        print('no such file:%s' % pathname)  # 则返回文件不存在
+        print('no such file: %s' % pathname)  # 则返回文件不存在
 
 
 def chart_init(_path_):
@@ -922,8 +977,8 @@ def chart_init(_path_):
     fd_Summary_Table = open(_path_ + 'chart/summary_table.md', 'w')
     print("\n## " + _path_.split('/')[-2], file=fd_Summary_Table)
     print("log||final|||||pos||||||vel|||||pli|| |cnr||||PR|||dopp||", file=fd_Summary_Table)
-    print(":-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|"
-          ":-:|:-:|:-:|:-:|:-:|:-:|", file=fd_Summary_Table)
+    print(":---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
+          ":---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|", file=fd_Summary_Table)
     print(".|Sep|Cep|sep50|sep95|sep99|sep std|cep50|cep95|cep99|cep std|v50|v95|v99|v std|fix rate|warning rate|"
           "mean|std|abnormal rate|mean|std|diff mean|diff std|"
           "mean[mean[diff_PR - diff_mean_PR]]|std[mean[diff_PR - diff_mean_PR]]|abnormal rate (100)|"
@@ -935,21 +990,25 @@ def chart_init(_path_):
 if __name__ == '__main__':
     # path = "/home/kwq/work/east_window/0302_night/"
     # file_lst = ["1_mdl5daa_memDbg_east.log"]
-    path = "/home/kwq/work/out_test/0219/tt/"
+    # path = "/home/kwq/tmp/test/"
+    path = "/home/kwq/work/out_test/0401/cd236_test/"
     # file_lst = ["1_mdl_5daa_newFrm_park.log", "COM7_210219_074646_F9P.txt"]
-    file_lst = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
+    # file_lst = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
+    file_lst = ["4_cd236_.log"]
     purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],
                "PR": ["cmp"], "dopp": ["cmp"]}
 
-    ubx_txt = "/home/kwq/work/out_test/0219/tt/COM7_210219_083116_F9P.txt"
-    ubx_gga = "/home/kwq/work/out_test/0219/tt/nmea/COM7_210219_083116_F9P.gga"
+    # ubx_txt = "/home/kwq/work/out_test/0219/tt/COM7_210219_083116_F9P.txt"
+    # ubx_gga = "/home/kwq/work/out_test/0219/tt/nmea/COM7_210219_083116_F9P.gga"
+    ubx_txt = ""
+    ubx_gga = "/home/kwq/tmp/test/ubx.gga"
     # delete_file(path + 'chart/_compare_dopp.xlsx')
     # delete_file(path + 'chart/_compare_PR.xlsx')
     # delete_file(path + 'chart/_compare_cnr.xlsx')
     # fd_summary_table = open(path + 'chart/summary_table.md', 'w')
     # print("log|final_sep|final_cep|||||pos||||||vel|||||pli|| |cnr||||PR|||dopp||", file=fd_summary_table)
-    # print(":-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|"
-    #       ":-:|:-:|:-:|:-:|:-:|:-:|", file=fd_summary_table)
+    # print(":-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
+    #       ":---:|:---:|:---:|:---:|:---:|:---:|", file=fd_summary_table)
     # print(".|sep50|sep95|sep99|sep std|cep50|cep95|cep99|cep std|v50|v95|v99|v std|fix rate|warning rate|"
     #       "mean|std|abnormal rate|mean|std|diff mean|diff std|"
     #       "mean[mean[diff_PR - diff_mean_PR]]|std[mean[diff_PR - diff_mean_PR]]|abnormal rate (100)|"
@@ -968,10 +1027,12 @@ if __name__ == '__main__':
         print("耗时: %d" % (end_time - start_time))
 
         '''进行的操作操作'''
+        # test.ls_igg_cmp_with_true(Txyz)
         test.final_pos_analysis(Txyz)
         test.static_pos_cmp(Txyz)
         test.pli_abnormal_pli_mean_cnr_mean()
-        test.cnr_cmp()
-        test.pr_cmp()
-        test.dopp_cmp()
+        if len(ubx_txt):
+            test.cnr_cmp()
+            test.pr_cmp()
+            test.dopp_cmp()
         print("", file=fd_summary_table)

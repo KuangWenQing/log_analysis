@@ -12,9 +12,12 @@ from base_function import calc_True_Txyz
 if __name__ == '__main__':
     num_argv = len(sys.argv)
     if num_argv < 2:
-        path = "/home/kwq/work/east_window/0316/"
-        ubx_txt = path + "COM3_210316_114345_F9P.txt"
-        ubx_gga = path + "nmea/COM3_210316_114345_F9P.gga"
+        # path = "/home/kwq/work/east_window/0316/"
+        # ubx_txt = path + "COM3_210316_114345_F9P.txt"
+        # ubx_gga = path + "nmea/COM3_210316_114345_F9P.gga"
+        path = "/home/kwq/work/out_test/0401/cd236_test/"
+        ubx_txt = path + "COM7_210401_082809_gan_F9P.txt"
+        ubx_gga = path + "nmea/COM7_210401_082809_gan_F9P.gga"
     else:
         path = sys.argv[1]
         ubx_txt = path + sys.argv[2]
@@ -29,7 +32,7 @@ if __name__ == '__main__':
 
     file_lst = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
     # file_lst = ["1_mdl5daa_fixRst_east.log"]
-
+    file_lst.sort()
     purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],
                 "PR": ["cmp"], "dopp": ["cmp"]}
     # purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],}
@@ -56,4 +59,5 @@ if __name__ == '__main__':
             test.pr_cmp()
             test.dopp_cmp()
         del test
+        print('\n\n')
     print("\n------\n", file=fd_summary_table)
