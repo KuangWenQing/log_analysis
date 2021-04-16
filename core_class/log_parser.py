@@ -8,16 +8,17 @@ __all__ = ['LogParser']
 
 
 class LogParser:
-    purpose_need_row = {"cnr": ["cnr", "svINFO", "prnNOW"], "pli": ["pli", "svINFO", "prnNOW"],
-                        "pos": ["GGA", "RMC", "GGAIGG"], "dli": ["dli"],
+    purpose_need_row = {"cnr": ["cnr", "svINFO", "prnNOW"], "pli": ["pli", "svINFO", "prnNOW"], "dli": ["dli"],
+                        "pos": ["GGA", "RMC", "GGAIGG", "GGAKF"], "posKF": ["RMCKF", "GGAKF"],
                         "PR": ["PR", "svINFO", "prnNOW"], "dopp": ["dopp", "svINFO", "prnNOW"]}
     row_flag_dict = {"cnr": ['cnr:', ''], "pli": ['pli ', ''], "svINFO": ['SV INFO', ''], "prnNOW": ['PRN NOW', ''],
                      "dli": ['dli a:', ''], "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ''],
-                     "chl_time": ['CHL TIME,', ''], "GGAIGG": ['$GGAIGG', ''],
+                     "chl_time": ['CHL TIME,', ''], "GGAIGG": ['$GGAIGG', ''], "GGAKF": ['$GPGGA,', ',KF*'],
+                     "RMCKF": ['$GPRMC,', 'KF'], "val_num": ["val num", "sv"],
                      "dopp": ['CHL DOPP,', 'ir'], 'PR': ['CHL PR,', 'ir'], "fix_sv": ['PV, val num', '']}
-    NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14, "GGAIGG": 14,
+    NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14, "GGAIGG": 14, "GGAKF": 14, "RMCKF": 12,
                  "chl_time": 3, "dopp": 11, "PR": 10,
-                 "svINFO": 9, "prnNOW": 9, "fix_sv": 2,
+                 "svINFO": 9, "prnNOW": 9, "fix_sv": 2, "val_num": 10,
                  "cnr": 9, "pli": 9, "dli": 9}
 
     def __init__(self, target_file, __purpose__, ubx_file):
@@ -33,7 +34,7 @@ class LogParser:
             self.path = target_file.split(self.filename)[0]
             self.f_our = open(target_file, 'r', errors="ignore")
             self.purpose = __purpose__.copy()
-            _target_row = ["chl_time", ]
+            _target_row = ["chl_time", "val_num"]
             for key in __purpose__.keys():
                 if key in LogParser.purpose_need_row.keys():
                     _target_row += LogParser.purpose_need_row[key]
@@ -75,6 +76,51 @@ class LogParser:
         else:
             return False
 
+    def read_one_second_field(self, flag_one_sec="bit lck"):
+        one_sec_row = {}
+        line = self.f_our.readline()
+        if line:
+            self.row_cnt += 1
+        while line:
+            one_sec_row[self.row_cnt] = line
+            line = self.f_our.readline()
+            self.row_cnt += 1
+            ''' 重启标志 '''
+            if "cce load over" in line:
+                self.restart = 2
+                break
+
+            ''' 1 秒标志 '''
+            if flag_one_sec in line:
+                break
+
+        self.pos = self.f_our.tell()
+        one_sec_row[self.row_cnt] = line
+        return one_sec_row
+
+    def extract_target_row(self):
+        one_sec_row = {}
+        one_second_field = self.read_one_second_field()
+        for key in one_second_field.keys():
+            line = one_second_field[key]
+            if "tot cnt:" in line:
+                self.final_pos_str = line
+            elif "set time:" in line:
+                if self.restart == 2:
+                    self.restart = 1
+
+            for target in self.target_row:
+                if line.startswith(self.row_flag_dict[target][0]) and self.row_flag_dict[target][1] in line \
+                        and target not in one_sec_row.keys():
+                    if target == "val_num":
+                        if not one_second_field[key-1].startswith("PDT DB DIFF,"):
+                            continue
+                    if self.is_intact(line, target):
+                        one_sec_row[target] = line
+                    else:
+                        print("The %d row << %s >> is incomplete" % (key, line))
+        return one_sec_row
+
     def one_second_field(self, flag_one_sec="bit lck"):
         one_sec_row = {}
         line = self.f_our.readline()
@@ -95,7 +141,7 @@ class LogParser:
                     if self.is_intact(line, target):
                         one_sec_row[target] = line
                     else:
-                        print("The  %d row <<%s>> is incomplete" % (self.row_cnt, line))
+                        print("The %d row << %s >> is incomplete" % (self.row_cnt, line))
             ''' 重启标志 '''
             if "cce load over" in line:
                 self.restart = 2
@@ -212,6 +258,7 @@ class LogParser:
                     _all_info_list.append(parser_field_dict)
             else:
                 field_dict = self.one_second_field()
+                #field_dict = self.extract_target_row()
                 if bool(field_dict):
                     file_dict = self.parser_field(field_dict)
                     try:
@@ -277,7 +324,11 @@ class LogParser:
 
         elif row_flag == "fix_sv":
             ret = row[row.index(self.row_flag_dict[row_flag]): row.index(',')]
-            _result_ = {row_flag: int(ret)}  # int
+            _result_ = {row_flag: int(ret)}     # int
+
+        elif row_flag == "val_num":
+            ret = re.findall(r"\d+", row)[0]
+            _result_ = {row_flag: int(ret)}     # int
 
         return _result_
 

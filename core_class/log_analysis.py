@@ -52,10 +52,11 @@ class LogAnalysis(LogParser):
                 _tmp_pli_lst = per_sec_info['pli']
             except:
                 continue
-            for i, item in enumerate(_tmp_pli_lst):
-                if item != 100:
-                    pli.append(item)
-                    idx.append(i)
+            # for i, item in enumerate(_tmp_pli_lst):
+            #     if item != 100:
+            #         pli.append(item)
+            #         idx.append(i)
+            pli, idx = self.valid_pli_and_index(_tmp_pli_lst)
             if len(pli):
                 pli_mean.append(np.mean(np.array(pli)))
                 pli_sum = np.sum(pli)
@@ -98,7 +99,7 @@ class LogAnalysis(LogParser):
         plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
-    def static_pos_cmp(self, true_xyz, fd_st):
+    def static_pos_cmp(self, true_xyz, fd_st=None):
         RMC_list = self.all_info_dict['RMC']
         time_list = self.all_info_dict['chl_time']
         all_diff_xyz = []
@@ -131,10 +132,10 @@ class LogAnalysis(LogParser):
         all_dis_EN = [np.linalg.norm(en) for en in all_EN]
         len_tmp = len(time_list)
         print("fix rate = {:.3%}, warning rate = {:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp))
+        self.sort_and_print_50_95_99(all_dis_xyz, "all_dis_xyz", fd_st)
+        max_dis = self.sort_and_print_50_95_99(all_dis_EN, "all_dis_EN", fd_st)
+        self.sort_and_print_50_95_99(diff_vel, "diff_vel", fd_st)
         if fd_st:
-            self.sort_and_print_50_95_99(all_dis_xyz, "all_dis_xyz", fd_st)
-            self.sort_and_print_50_95_99(all_dis_EN, "all_dis_EN", fd_st)
-            self.sort_and_print_50_95_99(diff_vel, "diff_vel", fd_st)
             print("{:.3%}|{:.3%}".format(len(time_pos) / len_tmp, gga_1_rmc_N / len_tmp),
                   end='|', file=fd_st)
 
@@ -145,6 +146,8 @@ class LogAnalysis(LogParser):
         plt.legend()  # 不加该语句无法显示 label
         plt.draw()
         plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_pos.png')
+        if max_dis > 100:
+            plt.show()
         plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
@@ -170,32 +173,42 @@ class LogAnalysis(LogParser):
         all_dis_EN = [np.linalg.norm(en) for en in all_EN]
         return time_lst, all_dis_EN, all_dis_xyz
 
-    def ls_igg_cmp_with_true(self, true_xyz):
-        dict_ls = dict(zip(["time", "EN", "ENU"], self._cmp_with_true_pos_(true_xyz, "GGA")))
-        dict_igg = dict(zip(["time", "EN", "ENU"], self._cmp_with_true_pos_(true_xyz, "GGAIGG")))
-        taget_dict = {"ls": dict_ls, "igg": dict_igg}
+    def cmp_with_true_draw_picture(self, true_xyz, target=["GGA", ]):
+        """
+        :param true_xyz:
+        :param target: list of GGA, such as : [GPGGA, BDGGA, GPGGA KF]
+        """
+        dict_tmp = {}
+        for aim in target:
+            dict_tmp[aim] = dict(zip(["time", "EN", "ENU"], self._cmp_with_true_pos_(true_xyz, aim)))
 
-        len_tmp = len(dict_ls["time"])
-        if len_tmp:
-            self.sort_and_print_50_95_99(dict_ls["ENU"], "ls_ENU")
-            self.sort_and_print_50_95_99(dict_ls["EN"], "ls_EN")
-            self.sort_and_print_50_95_99(dict_igg["ENU"], "igg_ENU")
-            self.sort_and_print_50_95_99(dict_igg["EN"], "igg_EN")
-        self.draw_in_one_pic(taget_dict, save_name="_ls_igg")
+        str_label = '_'
+        for key in dict_tmp.keys():
+            self.sort_and_print_50_95_99(dict_tmp[key]["ENU"], key + "_ENU")
+            self.sort_and_print_50_95_99(dict_tmp[key]["EN"], key + "_EN")
+            str_label += key + "_"
+        self.draw_in_one_pic(dict_tmp, save_name=str_label)
 
-    def draw_in_one_pic(self, target_dict, title="distance with true position", save_name=''):
+    def draw_in_one_pic(self, target_dict, save_name=''):
         fig1 = plt.figure(1)
-        plt.title(title)
+        plt.suptitle("distance with true position")
+        plt.subplot(211)
+        plt.title('ENU')
         for key in target_dict.keys():
-            plt.plot(target_dict[key]["time"], target_dict[key]["ENU"], marker='*', label=key + 'ENU')
-            plt.plot(target_dict[key]["time"], target_dict[key]["EN"], marker='o', label=key + 'EN')
+            plt.plot(target_dict[key]["time"], target_dict[key]["ENU"], marker='*', label=key)
+        plt.legend()  # 不加该语句无法显示 label
+
+        plt.subplot(212)
+        plt.title('EN')
+        for key in target_dict.keys():
+            plt.plot(target_dict[key]["time"], target_dict[key]["EN"], marker='o', label=key)
         plt.legend()  # 不加该语句无法显示 label
         plt.draw()
         plt.savefig(self.path + 'chart/' + self.filename[:-4] + save_name + '_cmp_pos.png')
-        plt.pause(11)  # 间隔的秒数： 11s
+        plt.pause(110)  # 间隔的秒数： 11s
         plt.close(fig1)
 
-    def sort_and_print_50_95_99(self, aim_list, keyword, fd_st):
+    def sort_and_print_50_95_99(self, aim_list, keyword, fd_st=None):
         sort_list = np.sort(aim_list)
         len_tmp = len(sort_list)
         percentage_50 = sort_list[int(len_tmp * 0.5)]
@@ -207,6 +220,7 @@ class LogAnalysis(LogParser):
         if fd_st:
             print("{:.3f}|{:.3f}|{:.3f}|{:.3f}".format(percentage_50, percentage_95, percentage_99, std_list),
                   end='|', file=fd_st)
+        return sort_list[-1]
 
     # noinspection PyTypeChecker
     def cnr_cmp(self, fd_st):
@@ -546,8 +560,10 @@ class LogAnalysis(LogParser):
         return chl_obj_mean, chl_obj_std
 
     def pli_PR(self):
-        pli_all = []
-        PR_diff_diff = []
+        PR_diff_diff_pli_mean = {}
+        PR_diff_diff_dli_mean = {}
+        PR_diff_diff_dict_pli = {}
+        PR_diff_diff_dict_dli = {}
 
         for per_sec_info in self.all_info_list:
             now_time = per_sec_info['chl_time']
@@ -556,6 +572,7 @@ class LogAnalysis(LogParser):
                 per_sec_sv = per_sec_info['prnNOW']
             except:
                 continue
+            dli_lst = per_sec_info["dli"]
             pli_lst = per_sec_info["pli"]
             PR_lst = per_sec_info["PR"]
             chl_valid = []
@@ -563,6 +580,7 @@ class LogAnalysis(LogParser):
                 if pli != 100:
                     chl_valid.append(idx)
             valid_sv = []
+            dli_8088 = {}
             pli_8088 = {}
             PR_8088 = {}
             PR_ubx = {}
@@ -573,7 +591,7 @@ class LogAnalysis(LogParser):
 
                 PR_8088[sv_id] = PR_lst[idx]
                 pli_8088[sv_id] = pli_lst[idx]
-
+                dli_8088[sv_id] = dli_lst[idx]
                 if sv_id > 32:
                     try:
                         PR_ubx[sv_id] = ubx_info['5'][str(sv_id - 32)]["PR"]
@@ -597,12 +615,31 @@ class LogAnalysis(LogParser):
                 mean_val = self.del_ab_val_calc_mean(diff_list)
 
                 for key in diff_dict.keys():
-                    PR_diff_diff.append(diff_dict[key] - mean_val)
-                    pli_all.append(pli_8088[key])
+                    diff_diff_mean = diff_dict[key] - mean_val
+                    if diff_diff_mean > 100 or diff_diff_mean < -100:
+                        continue
+                    if pli_8088[key] in PR_diff_diff_dict_pli.keys():
+                        PR_diff_diff_dict_pli[pli_8088[key]] += [diff_diff_mean, ]
+                    else:
+                        PR_diff_diff_dict_pli[pli_8088[key]] = [diff_diff_mean, ]
 
-        return PR_diff_diff, pli_all
+                    if dli_8088[key] in PR_diff_diff_dict_dli.keys():
+                        PR_diff_diff_dict_dli[dli_8088[key]] += [diff_diff_mean, ]
+                    else:
+                        PR_diff_diff_dict_dli[dli_8088[key]] = [diff_diff_mean, ]
+
+        for key in PR_diff_diff_dict_pli.keys():
+            PR_diff_diff_pli_mean[key] = np.mean(PR_diff_diff_dict_pli[key])
+        for key in PR_diff_diff_dict_dli.keys():
+            PR_diff_diff_dli_mean[key] = np.mean(PR_diff_diff_dict_dli[key])
+
+        return PR_diff_diff_pli_mean, PR_diff_diff_dli_mean
 
     def del_ab_val_calc_mean(self, arr: list):
+        """
+        ram arr:  an array
+        :return:  the mean of arr without the abnormal items
+        """
         if len(arr) < 3:
             return np.mean(arr)
         max_val = max(arr)
@@ -631,3 +668,45 @@ class LogAnalysis(LogParser):
                 return self.del_ab_val_calc_mean(del_min)
             else:
                 return np.mean(arr)
+
+    @staticmethod
+    def num_of_valid_pli(arr):
+        n = 0
+        for i in arr:
+            if i != 100:
+                n += 1
+        return n
+
+    @staticmethod
+    def valid_pli_and_index(arr):
+        valid_pli, idx = [], []
+        for i, item in enumerate(arr):
+            if item != 100:
+                valid_pli.append(item)
+                idx.append(i)
+        return valid_pli, idx
+
+    def not_fix_analysis(self):
+        reason = {"sv_less_4": [], "pli_too_bad": [], "unknown": []}
+        for info in self.all_info_list:
+            GGA = info["GGA"]
+            time = info["chl_time"]
+            if GGA['valid'] == 0:
+                pli = info["pli"]
+                try:
+                    if info["val_num"] < 4:
+                        reason["sv_less_4"].append(time)
+                        continue
+                except:
+                    reason["sv_less_4"].append(time)
+                    continue
+
+                valid_pli, _o_ = self.valid_pli_and_index(pli)
+                if np.mean(valid_pli) > 20:
+                    # print("pli too bad")
+                    reason["pli_too_bad"].append(time)
+                    continue
+                reason["unknown"].append(time)
+        print("sv_less_4: ", len(reason["sv_less_4"]))
+        print("pli_too_bad: ", len(reason["pli_too_bad"]))
+        print("unknown: ", len(reason["unknown"]))
