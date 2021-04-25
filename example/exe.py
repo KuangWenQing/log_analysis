@@ -15,9 +15,9 @@ if __name__ == '__main__':
         # path = "/home/kwq/work/east_window/0316/"
         # ubx_txt = path + "COM3_210316_114345_F9P.txt"
         # ubx_gga = path + "nmea/COM3_210316_114345_F9P.gga"
-        path = "/home/kwq/work/out_test/0401/cd236_test/"
-        ubx_txt = path + "COM7_210401_082809_gan_F9P.txt"
-        ubx_gga = path + "nmea/COM7_210401_082809_gan_F9P.gga"
+        path = "/home/kwq/work/east_window/0420/"
+        ubx_txt = path + "COM3_210420_111955_F9P.txt"
+        ubx_gga = path + "nmea/COM3_210420_111955_F9P.gga"
     else:
         path = sys.argv[1]
         ubx_txt = path + sys.argv[2]
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     file_lst.sort()
     purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],
                 "PR": ["cmp"], "dopp": ["cmp"]}
-    # purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],}
+    #purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "PR": ["cmp"]}
 
     fd_summary_table = chart_init(path)
     Txyz, Tlla, mean_err_dis, std_err_dis = calc_True_Txyz(ubx_gga)
@@ -46,10 +46,13 @@ if __name__ == '__main__':
         test = LogParser(path+file, purpose, ubx_txt, fd_summary_table)
 
         start_time = time.time()  # 开始时间
-        test.parser_file()
+        ret = test.parser_file()
         end_time = time.time()  # 结束时间
         print("耗时: %d" % (end_time - start_time))
-
+        if not ret:
+            del test
+            print("no information|", file=fd_summary_table)
+            continue
         '''进行的操作操作'''
         test.final_pos_analysis(Txyz)
         test.static_pos_cmp(Txyz)

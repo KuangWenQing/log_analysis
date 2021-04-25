@@ -9,10 +9,10 @@ __all__ = ['LogParser']
 
 class LogParser:
     purpose_need_row = {"cnr": ["cnr", "svINFO", "prnNOW"], "pli": ["pli", "svINFO", "prnNOW"], "dli": ["dli"],
-                        "pos": ["GGA", "RMC", "GGAIGG", "GGAKF"], "posKF": ["RMCKF", "GGAKF"],
+                        "pos": ["GGA", "RMC", "GGAIGG", "GFM"], "posKF": ["RMCKF", "GGAKF"],
                         "PR": ["PR", "svINFO", "prnNOW"], "dopp": ["dopp", "svINFO", "prnNOW"]}
     row_flag_dict = {"cnr": ['cnr:', ''], "pli": ['pli ', ''], "svINFO": ['SV INFO', ''], "prnNOW": ['PRN NOW', ''],
-                     "dli": ['dli a:', ''], "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ''],
+                     "dli": ['dli a:', ''], "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ',*'],
                      "chl_time": ['CHL TIME,', ''], "GGAIGG": ['$GGAIGG', ''], "GGAKF": ['$GPGGA,', ',KF*'],
                      "RMCKF": ['$GPRMC,', 'KF'], "val_num": ["val num", "sv"],
                      "dopp": ['CHL DOPP,', 'ir'], 'PR': ['CHL PR,', 'ir'], "fix_sv": ['PV, val num', '']}
@@ -21,7 +21,7 @@ class LogParser:
                  "svINFO": 9, "prnNOW": 9, "fix_sv": 2, "val_num": 10,
                  "cnr": 9, "pli": 9, "dli": 9}
 
-    def __init__(self, target_file, __purpose__, ubx_file):
+    def __init__(self, target_file, __purpose__: list, ubx_file):
         self.valid_chl_flag = [0, ]  # 9, 3, 1, 2]
         self.cmp_enable = 0
         self.cmp_support = 0
@@ -29,20 +29,20 @@ class LogParser:
             self.cmp_support = 1
             self.f_ubx = open(ubx_file, 'r', errors="ignore")
 
-        if isinstance(__purpose__, dict) and len(target_file):
+        if isinstance(__purpose__, list) and len(target_file):
             self.filename = os.path.split(target_file)[1]
             self.path = target_file.split(self.filename)[0]
             self.f_our = open(target_file, 'r', errors="ignore")
             self.purpose = __purpose__.copy()
             _target_row = ["chl_time", "val_num"]
-            for key in __purpose__.keys():
-                if key in LogParser.purpose_need_row.keys():
-                    _target_row += LogParser.purpose_need_row[key]
+            for item in __purpose__:
+                if item in LogParser.purpose_need_row.keys():
+                    _target_row += LogParser.purpose_need_row[item]
                 else:
-                    del self.purpose[key]
-                    print("can't support the <%s> purpose" % key)
+                    del self.purpose[item]
+                    print("can't support the <%s> purpose" % item)
 
-                if key in ["cnr", "pos", "pr", "dopp", "sv_keep"]:
+                if item in ["cnr", "pos", "pr", "dopp", "sv_keep"]:
                     self.cmp_enable = 1
             self.target_row = list(set(_target_row))
         else:
@@ -280,6 +280,35 @@ class LogParser:
             _result.update(self.parser_row(key, field_dict[key]))
         return _result
 
+    @staticmethod
+    def parser_gga(row_flag, row):
+        GGA = row.split(',')
+        if GGA[6] == '1':
+            alt = float(GGA[9])  # 海拔
+            alt_GS = float(GGA[11])  # 高程异常
+            high = alt + alt_GS  # 椭球高
+            lat = LogParser.GGA_ll_to_float(GGA[2])
+            lon = LogParser.GGA_ll_to_float(GGA[4])
+
+            xyz = lla_to_xyz(lat, lon, high)
+            return {row_flag: {'hms': round(float(GGA[1])), "lat": lat, "lon": lon, "high": high,
+                               "xyz": xyz, 'valid': 1}}
+        else:
+            return {row_flag: {'hms': str(round(float(GGA[1]))), 'valid': 0}}  # {}
+
+    @staticmethod
+    def parser_rmc(row_flag, row):
+        RMC = row.split(',')
+        if RMC[7]:
+            speed = float(RMC[7]) * 0.514  # float
+        else:
+            speed = None
+        if RMC[2] == 'A':
+            _result_ = {row_flag: {"speed": speed, 'valid': 1}}
+        else:
+            _result_ = {row_flag: {"speed": speed, 'valid': 0}}  # {}
+        return _result_
+
     def parser_row(self, row_flag, row):
         _result_ = {}
         if row_flag == "chl_time":
@@ -287,30 +316,11 @@ class LogParser:
             _result_ = {row_flag: ret}  # float
 
         elif row_flag == "GGA" or row_flag == "GGAKF" or row_flag == "GFM" or row_flag == "GGAIGG":
-            GGA = row.split(',')
-            if GGA[6] == '1':
-                alt = float(GGA[9])  # 海拔
-                alt_GS = float(GGA[11])  # 高程异常
-                high = alt + alt_GS  # 椭球高
-                lat = LogParser.GGA_ll_to_float(GGA[2])
-                lon = LogParser.GGA_ll_to_float(GGA[4])
-
-                xyz = lla_to_xyz(lat, lon, high)
-                _result_ = {row_flag: {"lat": lat, "lon": lon, "high": high, "xyz": xyz, 'valid': 1}}
-            else:
-                _result_ = {row_flag: {'valid': 0}}  # {}
+            _result_ = self.parser_gga(row_flag, row)
 
         elif row_flag == "RMC" or row_flag == "RMCKF":
             # speed = float(re.findall(r"\d+\.?\d*", row)[3]) * 0.514
-            RMC = row.split(',')
-            if RMC[7]:
-                speed = float(RMC[7]) * 0.514  # float
-            else:
-                speed = None
-            if RMC[2] == 'A':
-                _result_ = {row_flag: {"speed": speed, 'valid': 1}}
-            else:
-                _result_ = {row_flag: {"speed": speed, 'valid': 0}}  # {}
+            _result_ = self.parser_rmc(row_flag, row)
 
         elif row_flag == "cnr" or row_flag == "pli" or row_flag == "dli" or \
                 row_flag == "svINFO" or row_flag == "prnNOW":
@@ -356,6 +366,10 @@ class LogParser:
     def _transpose_(self):
         for key in self.target_row:
             self.all_info_dict[key] = []
+
+        self.all_info_dict["prnNOW"] = []
+        self.all_info_dict["svINFO"] = []
+
         for info in self.all_info_list:
             for key in info.keys():
                 self.all_info_dict[key].append(info[key])
@@ -392,3 +406,46 @@ class LogParser:
         ll_int_part = float(ll_str[: ll_str.find('.') - 2])
         ll_min_part = float(ll_str[ll_str.find('.') - 2:]) / 60.0
         return ll_int_part + ll_min_part
+
+
+class MovePosCmp(LogParser):
+    def __init__(self, target_file, ubx_file: str):
+        super().__init__(target_file, ["pos"], '')
+        self.f_ubx = open(ubx_file, 'r', errors="ignore")
+        self.gga_ubx_lst = []
+        self.gga_ubx_lst_len = self.get_ubx_gga()
+
+    def get_ubx_gga(self):
+        for row in self.f_ubx:
+            if "GGA," in row:
+                _result_ = self.parser_gga("GGA", row)
+                self.gga_ubx_lst.append(_result_["GGA"])
+        return len(self.gga_ubx_lst)
+
+    def gga_pos_cmp(self):
+        i = 0
+        for per_sec_info in self.all_info_list:
+            print(per_sec_info["chl_time"])
+            gga_8088 = per_sec_info["GGA"]
+            gga_ubx = self.gga_ubx_lst[i]
+
+            hms_8088 = gga_8088["hms"]
+            hms_ubx = gga_ubx['hms']
+            if hms_ubx - hms_8088 > 0:
+                continue
+            elif hms_ubx - hms_8088 < 0:
+                while hms_ubx != hms_8088:
+                    i += 1
+                    if i > self.gga_ubx_lst_len:
+                        break
+                    gga_ubx = self.gga_ubx_lst[i]
+                    hms_ubx = gga_ubx['hms']
+
+
+if __name__ == '__main__':
+    path = "/home/kwq/work/out_test/0418/"
+    file = "1_new_build.log"
+    ubx = "COM3_210419_072542_F9P.ubx"
+
+    test = MovePosCmp(path+file, path+ubx)
+    test.gga_pos_cmp()

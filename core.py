@@ -255,6 +255,10 @@ class LogAnalysis:
     def sort_and_print_50_95_99(self, aim_list, keyword, chart=0):
         sort_list = np.sort(aim_list)
         len_tmp = len(sort_list)
+        if len_tmp < 2:
+            if chart:
+                print("None|None|None|None", end='|', file=self.fd_st)
+            return
         percentage_50 = sort_list[int(len_tmp * 0.5)]
         percentage_95 = sort_list[int(len_tmp * 0.95)]
         percentage_99 = sort_list[int(len_tmp * 0.99)]
@@ -352,30 +356,34 @@ class LogAnalysis:
             tmp_len = len(valid_sv_id_lst)
             if tmp_len:
                 per_sec_cnr_mean.append(tmp_diff_sum/tmp_len)
-        print(
-            f"mean([per_sec_cnr_mean]) = {np.mean(per_sec_cnr_mean):f}, "
-            f"std([per_sec_cnr_mean]) = {np.std(per_sec_cnr_mean):f}")
-        if self.fd_st:
-            print("{:.3f}|{:.3f}".format(np.mean(per_sec_cnr_mean), np.std(per_sec_cnr_mean)), end='|', file=self.fd_st)
-        # fig1 = plt.figure(1)
-        # plt.title("compare with Ublox cnr")
-        # for sv_id in diff_cnr.keys():
-        #     plt.plot(diff_time[sv_id], diff_cnr[sv_id], marker='*', label='sv' + str(sv_id))
-        # plt.legend()  # 不加该语句无法显示 label
-        # plt.draw()
-        # plt.pause(40)  # 间隔的秒数： 4s
-        # plt.close(fig1)
+        if len(per_sec_cnr_mean) > 1:
+            print(
+                f"mean([per_sec_cnr_mean]) = {np.mean(per_sec_cnr_mean):f}, "
+                f"std([per_sec_cnr_mean]) = {np.std(per_sec_cnr_mean):f}")
+            if self.fd_st:
+                print("{:.3f}|{:.3f}".format(np.mean(per_sec_cnr_mean), np.std(per_sec_cnr_mean)), end='|', file=self.fd_st)
+            # fig1 = plt.figure(1)
+            # plt.title("compare with Ublox cnr")
+            # for sv_id in diff_cnr.keys():
+            #     plt.plot(diff_time[sv_id], diff_cnr[sv_id], marker='*', label='sv' + str(sv_id))
+            # plt.legend()  # 不加该语句无法显示 label
+            # plt.draw()
+            # plt.pause(40)  # 间隔的秒数： 4s
+            # plt.close(fig1)
 
-        for key in diff_cnr.keys():
-            diff_mean = round(np.mean(diff_cnr[key]), 3)
-            diff_std = round(np.std(diff_cnr[key]), 3)
-            our_mean = round(np.mean(all_sv_cnr[key]), 3)
-            our_std = round(np.std(all_sv_cnr[key]), 3)
-            ubx_mean = round(np.mean(ubx_sv_cnr[key]), 3)
-            ubx_std = round(np.std(ubx_sv_cnr[key]), 3)
+            for key in diff_cnr.keys():
+                diff_mean = round(np.mean(diff_cnr[key]), 3)
+                diff_std = round(np.std(diff_cnr[key]), 3)
+                our_mean = round(np.mean(all_sv_cnr[key]), 3)
+                our_std = round(np.std(all_sv_cnr[key]), 3)
+                ubx_mean = round(np.mean(ubx_sv_cnr[key]), 3)
+                ubx_std = round(np.std(ubx_sv_cnr[key]), 3)
 
-            write_value = [['sv' + str(key), ubx_mean, ubx_std, our_mean, our_std, diff_mean, diff_std, len(diff_cnr[key])]]
-            row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+                write_value = [['sv' + str(key), ubx_mean, ubx_std, our_mean, our_std, diff_mean, diff_std, len(diff_cnr[key])]]
+                row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+        else:
+            if self.fd_st:
+                print("None|None", end='|', file=self.fd_st)
         wb.save(book_name_xlsx)
         wb.close()
 
@@ -498,29 +506,33 @@ class LogAnalysis:
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
             row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
-        time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('PR', 100)
-        print(
-            f"mean([per_sec_diff_diff_PR_mean]) = {np.mean(per_sec_diff_diff_PR_mean):f}, "
-            f"std([per_sec_diff_diff_PR_mean]) = {np.std(per_sec_diff_diff_PR_mean):f}"
-            f", abnormal rate (100) = {abnormal_cnt*100.0/len(time_lst):f}%")
-        if self.fd_st:
-            print("{:.3f}|{:.3f}|{:.3%}".format(np.mean(per_sec_diff_diff_PR_mean),
-                                         np.std(per_sec_diff_diff_PR_mean),
-                                         abnormal_cnt/len(time_lst)), end='|', file=self.fd_st)
-        fig1 = plt.figure(1)
-        plt.title("compare with Ublox PR")
-        plt.plot(time_lst, per_sec_diff_diff_PR_mean, marker='*', label='diff_diff_PR_mean')
-        plt.legend()  # 不加该语句无法显示 label
-        plt.draw()
-        plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_PR.png')
-        plt.pause(4)  # 间隔的秒数： 4s
-        plt.close(fig1)
+        time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('PR', 50)
+        if len(per_sec_diff_diff_PR_mean) > 1:
+            print(
+                f"mean([per_sec_diff_diff_PR_mean]) = {np.mean(per_sec_diff_diff_PR_mean):f}, "
+                f"std([per_sec_diff_diff_PR_mean]) = {np.std(per_sec_diff_diff_PR_mean):f}"
+                f", abnormal rate (100) = {abnormal_cnt*100.0/len(time_lst):f}%")
+            if self.fd_st:
+                print("{:.3f}|{:.3f}|{:.3%}".format(np.mean(per_sec_diff_diff_PR_mean),
+                                             np.std(per_sec_diff_diff_PR_mean),
+                                             abnormal_cnt/len(time_lst)), end='|', file=self.fd_st)
+            fig1 = plt.figure(1)
+            plt.title("compare with Ublox PR")
+            plt.plot(time_lst, per_sec_diff_diff_PR_mean, marker='*', label='diff_diff_PR_mean')
+            plt.legend()  # 不加该语句无法显示 label
+            plt.draw()
+            plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_PR.png')
+            plt.pause(4)  # 间隔的秒数： 4s
+            plt.close(fig1)
 
-        for key in diff_PR.keys():
-            diff_mean = round(np.mean(diff_PR[key]), 3)
-            diff_std = round(np.std(diff_PR[key]), 3)
-            write_value = [['sv' + str(key), diff_mean, diff_std, len(diff_PR[key])]]
-            row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+            for key in diff_PR.keys():
+                diff_mean = round(np.mean(diff_PR[key]), 3)
+                diff_std = round(np.std(diff_PR[key]), 3)
+                write_value = [['sv' + str(key), diff_mean, diff_std, len(diff_PR[key])]]
+                row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+        else:
+            if self.fd_st:
+                print("None|None|None", end='|', file=self.fd_st)
         wb.save(book_name_xlsx)
         wb.close()
 
@@ -543,28 +555,32 @@ class LogAnalysis:
             row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('dopp', 5)
-        print(
-            f"mean([per_sec_diff_diff_dopp_mean]) = {np.mean(per_sec_diff_diff_PR_mean):f}, "
-            f"std([per_sec_diff_diff_dopp_mean]) = {np.std(per_sec_diff_diff_PR_mean):f}"
-            f", abnormal rate (5) = {abnormal_cnt*100.0/len(time_lst):f}%")
-        if self.fd_st:
-            print("{:.3f}|{:.3f}|{:.3%}".format(np.mean(per_sec_diff_diff_PR_mean),
-                                                np.std(per_sec_diff_diff_PR_mean),
-                                                abnormal_cnt/len(time_lst)), file=self.fd_st)
-        fig1 = plt.figure(1)
-        plt.title("compare with Ublox dopp")
-        plt.plot(time_lst, per_sec_diff_diff_PR_mean, marker='*', label='diff_diff_dopp_mean')
-        plt.legend()  # 不加该语句无法显示 label
-        plt.draw()
-        plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_dopp.png')
-        plt.pause(4)  # 间隔的秒数： 4s
-        plt.close(fig1)
+        if len(per_sec_diff_diff_PR_mean) > 1:
+            print(
+                f"mean([per_sec_diff_diff_dopp_mean]) = {np.mean(per_sec_diff_diff_PR_mean):f}, "
+                f"std([per_sec_diff_diff_dopp_mean]) = {np.std(per_sec_diff_diff_PR_mean):f}"
+                f", abnormal rate (5) = {abnormal_cnt*100.0/len(time_lst):f}%")
+            if self.fd_st:
+                print("{:.3f}|{:.3f}|{:.3%}".format(np.mean(per_sec_diff_diff_PR_mean),
+                                                    np.std(per_sec_diff_diff_PR_mean),
+                                                    abnormal_cnt/len(time_lst)), file=self.fd_st)
+            fig1 = plt.figure(1)
+            plt.title("compare with Ublox dopp")
+            plt.plot(time_lst, per_sec_diff_diff_PR_mean, marker='*', label='diff_diff_dopp_mean')
+            plt.legend()  # 不加该语句无法显示 label
+            plt.draw()
+            plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_dopp.png')
+            plt.pause(4)  # 间隔的秒数： 4s
+            plt.close(fig1)
 
-        for key in diff_PR.keys():
-            diff_mean = round(np.mean(diff_PR[key]), 3)
-            diff_std = round(np.std(diff_PR[key]), 3)
-            write_value = [['sv' + str(key), diff_mean, diff_std, len(diff_PR[key])]]
-            row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+            for key in diff_PR.keys():
+                diff_mean = round(np.mean(diff_PR[key]), 3)
+                diff_std = round(np.std(diff_PR[key]), 3)
+                write_value = [['sv' + str(key), diff_mean, diff_std, len(diff_PR[key])]]
+                row_xlsx = write_excel_xlsx(ws, write_value, row_xlsx)
+        else:
+            if self.fd_st:
+                print("None|None|None", end='|', file=self.fd_st)
         wb.save(book_name_xlsx)
         wb.close()
 
@@ -855,10 +871,12 @@ class LogParser(LogAnalysis):
         #                     else:
 
         if len(_all_info_list) == 0:
-            sys.exit("find nothing valid information. Please make sure the input file is right")
+            print("!!!!!\nfind nothing valid information. Please make sure the input file is right\n!!!!!")
+            return False
         self.all_info_list = _all_info_list  # [{"cnr": [], "pli": [], "pr": [], }, {2sec info}, ... ]
         self._transpose_()
         self.all_valid_chl = self.valid_chl_list()
+        return True
 
     def parser_field(self, field_dict):
         _result = {}
@@ -991,17 +1009,17 @@ if __name__ == '__main__':
     # path = "/home/kwq/work/east_window/0302_night/"
     # file_lst = ["1_mdl5daa_memDbg_east.log"]
     # path = "/home/kwq/tmp/test/"
-    path = "/home/kwq/work/out_test/0401/cd236_test/"
+    path = "/home/kwq/work/out_test/0422/door/"
     # file_lst = ["1_mdl_5daa_newFrm_park.log", "COM7_210219_074646_F9P.txt"]
     # file_lst = [f for f in os.listdir(path) if f.endswith('.log') or f.endswith('DAT')]
-    file_lst = ["4_cd236_.log"]
+    file_lst = ["1_qfn4caa_door-2021_4_22_16-24-35.DAT"]
     purpose = {"cnr": ["mean", "std"], "pli": ["mean"], "pos": ["cep50", "cep95", "cep99", "mean", "std"],
                "PR": ["cmp"], "dopp": ["cmp"]}
 
     # ubx_txt = "/home/kwq/work/out_test/0219/tt/COM7_210219_083116_F9P.txt"
     # ubx_gga = "/home/kwq/work/out_test/0219/tt/nmea/COM7_210219_083116_F9P.gga"
-    ubx_txt = ""
-    ubx_gga = "/home/kwq/tmp/test/ubx.gga"
+    ubx_txt = "/home/kwq/work/out_test/0422/door/COM7_210422_081823_F9P.txt"
+    ubx_gga = "/home/kwq/work/out_test/0422/door/nmea/COM7_210422_081823_F9P.gga"
     # delete_file(path + 'chart/_compare_dopp.xlsx')
     # delete_file(path + 'chart/_compare_PR.xlsx')
     # delete_file(path + 'chart/_compare_cnr.xlsx')
@@ -1022,9 +1040,13 @@ if __name__ == '__main__':
         test = LogParser(path+file, purpose, ubx_txt, fd_summary_table)
 
         start_time = time.time()  # 开始时间
-        test.parser_file()
+        ret = test.parser_file()
         end_time = time.time()  # 结束时间
         print("耗时: %d" % (end_time - start_time))
+        if not ret:
+            del test
+            print("no information|", file=fd_summary_table)
+            continue
 
         '''进行的操作操作'''
         # test.ls_igg_cmp_with_true(Txyz)

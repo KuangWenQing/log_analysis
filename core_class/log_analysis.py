@@ -8,7 +8,7 @@ __all__ = ['LogAnalysis']
 
 
 class LogAnalysis(LogParser):
-    def __init__(self, target_file: str, __purpose__: dict, ubx_file=''):
+    def __init__(self, target_file: str, __purpose__: list, ubx_file=''):
         super().__init__(target_file, __purpose__, ubx_file)
 
     def final_pos_analysis(self, true_xyz, fd_st):
@@ -205,7 +205,7 @@ class LogAnalysis(LogParser):
         plt.legend()  # 不加该语句无法显示 label
         plt.draw()
         plt.savefig(self.path + 'chart/' + self.filename[:-4] + save_name + '_cmp_pos.png')
-        plt.pause(110)  # 间隔的秒数： 11s
+        plt.pause(10)  # 间隔的秒数： 11s
         plt.close(fig1)
 
     def sort_and_print_50_95_99(self, aim_list, keyword, fd_st=None):
@@ -615,8 +615,8 @@ class LogAnalysis(LogParser):
                 mean_val = self.del_ab_val_calc_mean(diff_list)
 
                 for key in diff_dict.keys():
-                    diff_diff_mean = diff_dict[key] - mean_val
-                    if diff_diff_mean > 100 or diff_diff_mean < -100:
+                    diff_diff_mean = np.abs(diff_dict[key] - mean_val)
+                    if diff_diff_mean > 500 or diff_diff_mean < -500:
                         continue
                     if pli_8088[key] in PR_diff_diff_dict_pli.keys():
                         PR_diff_diff_dict_pli[pli_8088[key]] += [diff_diff_mean, ]
