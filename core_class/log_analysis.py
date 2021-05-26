@@ -1,7 +1,9 @@
 import openpyxl
+import os, sys
 import numpy as np
 from log_parser import LogParser
 import matplotlib.pyplot as plt
+sys.path.extend([".."] + [os.path.join(root, name) for root, dirs, _ in os.walk("../") for name in dirs])
 from base_function import ecef_to_enu, write_excel_xlsx, find_abnormal_data, xyz_to_lla, degree_to_dms
 
 __all__ = ['LogAnalysis']
@@ -146,8 +148,8 @@ class LogAnalysis(LogParser):
         plt.legend()  # 不加该语句无法显示 label
         plt.draw()
         plt.savefig(self.path + 'chart/' + self.filename[:-4] + '_cmp_pos.png')
-        if max_dis > 100:
-            plt.show()
+        # if max_dis > 100:
+        #     plt.show()
         plt.pause(4)  # 间隔的秒数： 4s
         plt.close(fig1)
 
@@ -168,7 +170,7 @@ class LogAnalysis(LogParser):
                 all_EN.append(ENU[:2])  # 收集东北
                 time_lst.append(SoW)
             sec += 1
-
+        print(aim + "  fix rate = {:.3%}  ".format(len(time_lst)/sec))
         all_dis_xyz = [np.linalg.norm(diff_xyz) for diff_xyz in all_diff_xyz]
         all_dis_EN = [np.linalg.norm(en) for en in all_EN]
         return time_lst, all_dis_EN, all_dis_xyz
@@ -215,7 +217,7 @@ class LogAnalysis(LogParser):
         percentage_95 = sort_list[int(len_tmp * 0.95)]
         percentage_99 = sort_list[int(len_tmp * 0.99)]
         std_list = np.std(sort_list)
-        print(keyword + " 50% = {:f}, 95% = {:f}, 99% = {:f}, std = {:f}"
+        print(keyword + " 50% = {:.3f}, 95% = {:.3f}, 99% = {:.3f}, std = {:.3f}  "
               .format(percentage_50, percentage_95, percentage_99, std_list))
         if fd_st:
             print("{:.3f}|{:.3f}|{:.3f}|{:.3f}".format(percentage_50, percentage_95, percentage_99, std_list),
@@ -238,13 +240,11 @@ class LogAnalysis(LogParser):
             row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            while ws.cell(row + 1, 1).value:
-                row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row + 2)
+            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, 0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         all_sv_cnr = {}
         ubx_sv_cnr = {}
@@ -453,13 +453,11 @@ class LogAnalysis(LogParser):
             row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            while ws.cell(row + 1, 1).value:
-                row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row + 2)
+            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, 0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('PR', 100)
         print(
@@ -495,16 +493,14 @@ class LogAnalysis(LogParser):
         try:
             wb = openpyxl.load_workbook(book_name_xlsx)
             ws = wb.active
-            row = 1
+            row = 3
             while ws.cell(row, 1).value:
                 row += 1
-            while ws.cell(row + 1, 1).value:
-                row += 1
-            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row + 2)
+            row_xlsx = write_excel_xlsx(ws, [[self.filename]], row)
         except:
             wb = openpyxl.Workbook()  # 创建一个workbook对象，而且会在workbook中至少创建一个表worksheet
             ws = wb.active  # 获取当前活跃的worksheet,默认就是第一个worksheet
-            row_xlsx = write_excel_xlsx(ws, head_xlsx, 0)
+            row_xlsx = write_excel_xlsx(ws, head_xlsx, 1)
 
         time_lst, per_sec_diff_diff_PR_mean, diff_PR, abnormal_cnt = self.pr_dopp_union('dopp', 5)
         print(

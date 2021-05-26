@@ -200,6 +200,32 @@ def write_excel_xlsx(sheet, value, row_cnt=1):
     return row_cnt
 
 
+def delete_file(pathname):
+    if os.path.exists(pathname):  # 如果文件存在
+        # 删除文件，可使用以下两种方法。
+        os.remove(pathname)
+        # os.unlink(path)   # 删除一个正在使用的文件会报错
+    else:
+        print('no such file: %s' % pathname)  # 则返回文件不存在
+
+
+def chart_init(_path_):
+    delete_file(_path_ + 'chart/_compare_dopp.xlsx')
+    delete_file(_path_ + 'chart/_compare_PR.xlsx')
+    delete_file(_path_ + 'chart/_compare_cnr.xlsx')
+    fd_Summary_Table = open(_path_ + 'chart/summary_table.md', 'w')
+    print("\n## " + _path_.split('/')[-2], file=fd_Summary_Table)
+    print("log||final|||||pos||||||vel|||||pli|| |cnr||||PR|||dopp||", file=fd_Summary_Table)
+    print(":---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
+          ":---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|", file=fd_Summary_Table)
+    print(".|Sep|Cep|sep50|sep95|sep99|sep std|cep50|cep95|cep99|cep std|v50|v95|v99|v std|fix rate|warning rate|"
+          "mean|std|abnormal rate|mean|std|diff mean|diff std|"
+          "mean[mean[diff_PR - diff_mean_PR]]|std[mean[diff_PR - diff_mean_PR]]|abnormal rate (100)|"
+          "mean[mean[diff_dopp - diff_mean_dopp]]|std[mean[diff_dopp - diff_mean_dopp]]|abnormal rate (5)",
+          file=fd_Summary_Table)
+    return fd_Summary_Table
+
+
 '''alt = 361.31     # 实验室窗户
 lat = convert_ll_to_float("2936.1604")
 lon = convert_ll_to_float("10618.0286")'''

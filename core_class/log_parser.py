@@ -14,7 +14,7 @@ class LogParser:
     row_flag_dict = {"cnr": ['cnr:', ''], "pli": ['pli ', ''], "svINFO": ['SV INFO', ''], "prnNOW": ['PRN NOW', ''],
                      "dli": ['dli a:', ''], "RMC": ['$GPRMC,', ''], "GGA": ['$GPGGA,', ',*'], "GFM": ['$GPGFM', ',*'],
                      "chl_time": ['CHL TIME,', ''], "GGAIGG": ['$GGAIGG', ''], "GGAKF": ['$GPGGA,', ',KF*'],
-                     "RMCKF": ['$GPRMC,', 'KF'], "val_num": ["val num", "sv"],
+                     "RMCKF": ['$GPRMC,', 'KF'], "val_num": ["val num", "sv "],
                      "dopp": ['CHL DOPP,', 'ir'], 'PR': ['CHL PR,', 'ir'], "fix_sv": ['PV, val num', '']}
     NUM_COMMA = {"GGA": 14, "RMC": 12, "GFM": 14, "GGAIGG": 14, "GGAKF": 14, "RMCKF": 12,
                  "chl_time": 3, "dopp": 11, "PR": 10,
@@ -39,7 +39,7 @@ class LogParser:
                 if item in LogParser.purpose_need_row.keys():
                     _target_row += LogParser.purpose_need_row[item]
                 else:
-                    del self.purpose[item]
+                    # del self.purpose[item]
                     print("can't support the <%s> purpose" % item)
 
                 if item in ["cnr", "pos", "pr", "dopp", "sv_keep"]:
@@ -269,7 +269,7 @@ class LogParser:
                     _all_info_list.append(file_dict)
 
         if len(_all_info_list) == 0:
-            sys.exit("find nothing valid information. Please make sure the input file is right")
+            sys.exit("find nothing valid information. Please make sure the input file is right!")
         self.all_info_list = _all_info_list  # [{"cnr": [], "pli": [], "pr": [], }, {2sec info}, ... ]
         self._transpose_()
         self.all_valid_chl = self.valid_chl_list(self.valid_chl_flag)
